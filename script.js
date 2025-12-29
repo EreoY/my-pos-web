@@ -96,7 +96,7 @@ btnOrder.addEventListener('click', async () => {
                 // ส่ง Token ไปบอก Server ว่าต้องแจ้งเตือนเครื่องไหน
                 token: DEVICE_TOKEN,
                 // ข้อมูลออเดอร์
-                order: orderData
+                orderData: orderData
             }),
         });
 
