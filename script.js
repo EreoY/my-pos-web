@@ -1,4 +1,11 @@
-// Hardcoded Menu
+// ==========================================
+// CONFIGURATION (ตั้งค่าระบบ)
+// ==========================================
+
+// ✅ ลิ้งค์ Cloud Function ของคุณ (ใส่ให้แล้วครับ)
+const CLOUD_FUNCTION_URL = "https://us-central1-pos-system-4d0b5.cloudfunctions.net/sendOrder";
+
+// เมนูอาหาร (ตัวอย่าง)
 const MENU = [
     { id: 1, name: "Espresso", price: 2.50 },
     { id: 2, name: "Cappuccino", price: 3.50 },
@@ -8,19 +15,20 @@ const MENU = [
     { id: 6, name: "Croissant", price: 3.00 },
 ];
 
-let cart = [];
-let conn = null;
-let peer = null;
+// ==========================================
+// SYSTEM LOGIC
+// ==========================================
 
-// Get Host ID from URL
+let cart = [];
+
+// 1. ดึง Token จาก URL (ที่มาจากการสแกน QR)
 const urlParams = new URLSearchParams(window.location.search);
-// Support both 'id' (new standard) and 'hostId' (legacy/fallback)
-const HOST_ID = urlParams.get('id') || urlParams.get('hostId');
+const DEVICE_TOKEN = urlParams.get('token');
 
 const statusDiv = document.getElementById('status');
 const btnOrder = document.getElementById('btn-order');
 
-// UI Render
+// ฟังก์ชันแสดงเมนู
 function renderMenu() {
     const container = document.getElementById('menu');
     container.innerHTML = MENU.map(item => `
@@ -31,100 +39,83 @@ function renderMenu() {
     `).join('');
 }
 
+// อัปเดตตระกร้าสินค้า
 function updateCartUI() {
     const total = cart.reduce((sum, item) => sum + item.price, 0);
     document.getElementById('total-price').innerText = `$${total.toFixed(2)}`;
     document.getElementById('item-count').innerText = `${cart.length} items`;
 
-    btnOrder.disabled = cart.length === 0 || !conn || !conn.open;
+    btnOrder.disabled = cart.length === 0;
 }
 
+// เพิ่มสินค้า
 window.addToCart = (id) => {
     const item = MENU.find(m => m.id === id);
     if (item) {
         cart.push(item);
         updateCartUI();
 
-        // Simple feedback
+        // Effect
         const el = event.currentTarget;
         el.style.backgroundColor = '#f0f0f0';
         setTimeout(() => el.style.backgroundColor = 'white', 100);
     }
 }
 
-// PeerJS Logic
-function initPeer() {
-    if (!HOST_ID) {
-        statusDiv.innerHTML = '<span class="status-disconnected">Error: No Merchant ID found in URL.</span>';
-        return;
-    }
-
-    peer = new Peer(); // Auto-generate ID for customer
-
-    peer.on('open', (id) => {
-        console.log('My PeerJS ID: ' + id);
-        if (HOST_ID) {
-            connectToMerchant();
-        } else {
-            statusDiv.innerHTML = '<span class="status-disconnected">Error: No Merchant ID provided. Scan QR again.</span>';
-        }
-    });
-
-    peer.on('error', (err) => {
-        console.error(err);
-        statusDiv.innerHTML = `<span class="status-disconnected">Error: ${err.type}</span>`;
-    });
+// ตรวจสอบความพร้อม
+if (!DEVICE_TOKEN) {
+    statusDiv.innerHTML = '<span class="status-disconnected">❌ Error: No Token. Scan QR again.</span>';
+    btnOrder.disabled = true;
+} else {
+    statusDiv.innerHTML = '<span class="status-connected">✅ Ready to Order</span>';
 }
 
-function connectToMerchant() {
-    statusDiv.innerHTML = 'Connecting to Shop...';
-
-    conn = peer.connect(HOST_ID);
-
-    conn.on('open', () => {
-        statusDiv.innerHTML = '<span class="status-connected">Connected to Shop!</span>';
-        updateCartUI();
-    });
-
-    conn.on('close', () => {
-        statusDiv.innerHTML = '<span class="status-disconnected">Disconnected from Shop.</span>';
-        btnOrder.disabled = true;
-    });
-
-    conn.on('error', (err) => {
-        console.error('Connection Error:', err);
-        statusDiv.innerHTML = '<span class="status-disconnected">Connection Error.</span>';
-    });
-
-    conn.on('data', (data) => {
-        // Handle ack
-        if (data && data.status) {
-            alert(`Shop says: ${data.status}`);
-            if (data.status === 'RECEIVED' || data.status === 'ACCEPTED') {
-                cart = [];
-                updateCartUI();
-            }
-        }
-    });
-}
-
-btnOrder.addEventListener('click', () => {
-    if (!conn || !conn.open) {
-        alert("Not connected to shop!");
-        return;
-    }
-
-    const payload = {
-        table: "1", // Hardcoded for now, could be dynamic
+// ==========================================
+// SENDING LOGIC (ส่งข้อมูลไป Cloud Functions)
+// ==========================================
+btnOrder.addEventListener('click', async () => {
+    // เตรียมข้อมูลออเดอร์
+    const orderData = {
+        table: "1",
         items: cart,
         total: cart.reduce((sum, item) => sum + item.price, 0),
         timestamp: Date.now()
     };
 
-    conn.send(payload);
-    statusDiv.innerHTML = 'Sending Order...';
+    statusDiv.innerHTML = '🚀 Sending Order to Cloud...';
+    btnOrder.disabled = true;
+
+    try {
+        // ยิงไปที่ Cloud Function (Plan A)
+        const response = await fetch(CLOUD_FUNCTION_URL, {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+            },
+            body: JSON.stringify({
+                // ส่ง Token ไปบอก Server ว่าต้องแจ้งเตือนเครื่องไหน
+                token: DEVICE_TOKEN,
+                // ข้อมูลออเดอร์
+                order: orderData
+            }),
+        });
+
+        if (response.ok) {
+            statusDiv.innerHTML = '<span class="status-connected">🎉 Order Sent!</span>';
+            cart = [];
+            updateCartUI();
+            alert("สั่งอาหารเรียบร้อยครับ!");
+        } else {
+            const err = await response.text();
+            throw new Error(err);
+        }
+    } catch (error) {
+        console.error(error);
+        statusDiv.innerHTML = '<span class="status-disconnected">❌ Failed</span>';
+        alert("เกิดข้อผิดพลาด: " + error.message);
+        btnOrder.disabled = false;
+    }
 });
 
-// Init
+// เริ่มทำงาน
 renderMenu();
-initPeer();
