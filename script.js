@@ -14,7 +14,8 @@ let peer = null;
 
 // Get Host ID from URL
 const urlParams = new URLSearchParams(window.location.search);
-const HOST_ID = urlParams.get('hostId');
+// Support both 'id' (new standard) and 'hostId' (legacy/fallback)
+const HOST_ID = urlParams.get('id') || urlParams.get('hostId');
 
 const statusDiv = document.getElementById('status');
 const btnOrder = document.getElementById('btn-order');
@@ -61,8 +62,12 @@ function initPeer() {
     peer = new Peer(); // Auto-generate ID for customer
 
     peer.on('open', (id) => {
-        console.log('My ID: ' + id);
-        connectToMerchant();
+        console.log('My PeerJS ID: ' + id);
+        if (HOST_ID) {
+            connectToMerchant();
+        } else {
+            statusDiv.innerHTML = '<span class="status-disconnected">Error: No Merchant ID provided. Scan QR again.</span>';
+        }
     });
 
     peer.on('error', (err) => {
