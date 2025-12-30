@@ -66,7 +66,7 @@ btnConnect.addEventListener('click', () => {
     initSystem();
 });
 
-// 2. Init Logic (FIXED: Manual SW Registration)
+// 2. Init Logic (FIXED: Manual SW Registration with Full Path)
 async function initSystem() {
     if (!MERCHANT_TOKEN) {
         statusDiv.innerHTML = '<span class="status-disconnected">❌ Error: Invalid Link (No Shop Token)</span>';
@@ -88,11 +88,14 @@ async function initSystem() {
 
         statusDiv.innerHTML = 'Registering Service Worker...';
 
-        // FIX: Manually register Service Worker to handle GitHub Pages subdirectory path
+        // FIX: Manually register Service Worker with ABSOLUTE PATH for GitHub Pages
         if ('serviceWorker' in navigator) {
             try {
-                const registration = await navigator.serviceWorker.register('./firebase-messaging-sw.js', { scope: './' });
-                console.log('Service Worker Registered');
+                // ✅ แก้ไขตรงนี้: ระบุชื่อโฟลเดอร์โปรเจกต์ /my-pos-web/ นำหน้า
+                const registration = await navigator.serviceWorker.register('/my-pos-web/firebase-messaging-sw.js', {
+                    scope: '/my-pos-web/'
+                });
+                console.log('Service Worker Registered at /my-pos-web/');
 
                 // Pass registration to getToken
                 MY_REPLY_TOKEN = await messaging.getToken({
@@ -101,7 +104,13 @@ async function initSystem() {
                 });
             } catch (err) {
                 console.error("SW Registration Failed", err);
-                throw new Error("SW Registration Failed");
+                // ถ้าลงทะเบียนแบบระบุ Path ไม่ผ่าน ลองแบบธรรมดา (เผื่อรัน Localhost)
+                console.log("Retrying with relative path...");
+                const fallbackReg = await navigator.serviceWorker.register('./firebase-messaging-sw.js');
+                MY_REPLY_TOKEN = await messaging.getToken({
+                    vapidKey: VAPID_KEY,
+                    serviceWorkerRegistration: fallbackReg
+                });
             }
         } else {
             // Fallback for browsers without SW support
@@ -118,7 +127,7 @@ async function initSystem() {
 
     } catch (e) {
         console.error("Init Error:", e);
-        statusDiv.innerHTML = '<span class="status-disconnected">❌ Connection Failed</span>';
+        statusDiv.innerHTML = '<span class="status-disconnected">❌ Connection Failed (See Console)</span>';
         btnConnect.style.display = 'block';
     }
 }
