@@ -37,14 +37,12 @@ const btnOrder = document.getElementById('btn-order');
 // ==========================================
 let messaging = null;
 
-// Initialize App Immediately (for Listener)
 try {
     if (!firebase.apps.length) {
         firebase.initializeApp(firebaseConfig);
     }
     messaging = firebase.messaging();
 
-    // Listener for Background/Foreground Messages
     messaging.onMessage((payload) => {
         console.log('FCM Message:', payload);
         const data = payload.data;
@@ -61,24 +59,21 @@ try {
 // EVENTS & FLOW
 // ==========================================
 
-// 1. Click-to-Connect (iOS Requirement)
 btnConnect.addEventListener('click', () => {
     initSystem();
 });
 
-// 2. Init Logic (FIXED: Manual SW Registration with Full Path)
+// ✅ ฟังก์ชันเริ่มระบบ (ฉบับแก้ใจร้อน: รอ Service Worker ตื่นก่อน)
 async function initSystem() {
     if (!MERCHANT_TOKEN) {
         statusDiv.innerHTML = '<span class="status-disconnected">❌ Error: Invalid Link (No Shop Token)</span>';
         return;
     }
 
-    // UI Updates
     btnConnect.style.display = 'none';
     statusDiv.innerHTML = 'Requesting Permission...';
 
     try {
-        // Request Notification Permission
         const permission = await Notification.requestPermission();
         if (permission !== 'granted') {
             statusDiv.innerHTML = '<span class="status-disconnected">❌ Permission Denied</span>';
@@ -88,32 +83,24 @@ async function initSystem() {
 
         statusDiv.innerHTML = 'Registering Service Worker...';
 
-        // FIX: Manually register Service Worker with ABSOLUTE PATH for GitHub Pages
         if ('serviceWorker' in navigator) {
-            try {
-                // ✅ แก้ไขตรงนี้: ระบุชื่อโฟลเดอร์โปรเจกต์ /my-pos-web/ นำหน้า
-                const registration = await navigator.serviceWorker.register('/my-pos-web/firebase-messaging-sw.js', {
-                    scope: '/my-pos-web/'
-                });
-                console.log('Service Worker Registered at /my-pos-web/');
+            // 1. ลงทะเบียน (เหมือนเดิม)
+            const registration = await navigator.serviceWorker.register('/my-pos-web/firebase-messaging-sw.js', {
+                scope: '/my-pos-web/'
+            });
+            console.log('Service Worker Registered');
 
-                // Pass registration to getToken
-                MY_REPLY_TOKEN = await messaging.getToken({
-                    vapidKey: VAPID_KEY,
-                    serviceWorkerRegistration: registration
-                });
-            } catch (err) {
-                console.error("SW Registration Failed", err);
-                // ถ้าลงทะเบียนแบบระบุ Path ไม่ผ่าน ลองแบบธรรมดา (เผื่อรัน Localhost)
-                console.log("Retrying with relative path...");
-                const fallbackReg = await navigator.serviceWorker.register('./firebase-messaging-sw.js');
-                MY_REPLY_TOKEN = await messaging.getToken({
-                    vapidKey: VAPID_KEY,
-                    serviceWorkerRegistration: fallbackReg
-                });
-            }
+            // ⚠️ 2. เพิ่มบรรทัดนี้: รอให้ Service Worker พร้อมใช้งานจริงๆ ก่อน (Active)
+            statusDiv.innerHTML = 'Waiting for SW ready...';
+            await navigator.serviceWorker.ready;
+            console.log('Service Worker is Ready!');
+
+            // 3. ค่อยขอ Token
+            MY_REPLY_TOKEN = await messaging.getToken({
+                vapidKey: VAPID_KEY,
+                serviceWorkerRegistration: registration
+            });
         } else {
-            // Fallback for browsers without SW support
             MY_REPLY_TOKEN = await messaging.getToken({ vapidKey: VAPID_KEY });
         }
 
@@ -127,7 +114,8 @@ async function initSystem() {
 
     } catch (e) {
         console.error("Init Error:", e);
-        statusDiv.innerHTML = '<span class="status-disconnected">❌ Connection Failed (See Console)</span>';
+        // แสดง Error ชัดๆ บนหน้าจอ
+        statusDiv.innerHTML = `<span class="status-disconnected">❌ Error: ${e.message}</span>`;
         btnConnect.style.display = 'block';
     }
 }
@@ -177,7 +165,7 @@ function handleMenuChunk(data) {
             MENU = JSON.parse(fullJson);
             renderMenu();
             statusDiv.innerHTML = '<span class="status-connected">✅ Top-up & Pay available</span>';
-            menuContainer.style.display = 'block'; // Show Menu
+            menuContainer.style.display = 'block';
         } catch (e) {
             console.error("Parse Error", e);
             statusDiv.innerHTML = '❌ Menu Corrupted';
@@ -210,7 +198,6 @@ window.addToCart = (id) => {
     if (item) {
         cart.push(item);
         updateCartUI();
-        // Visual Click Effect
         const el = event.currentTarget;
         const originalBg = el.style.backgroundColor;
         el.style.backgroundColor = '#e8f5e9';
