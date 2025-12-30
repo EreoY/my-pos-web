@@ -1,10 +1,9 @@
 // ==========================================
-// CONFIGURATION
+// CONFIGURATION (Hardcoded)
 // ==========================================
-// ✅ ใช้ URL ใหม่ (Gen 2) ที่ถูกต้อง
 const CLOUD_FUNCTION_URL = "https://sendorder-xtqo4x663a-uc.a.run.app";
+const VAPID_KEY = "BANMxuREDu4hfBFsBIMCc1nX1K_XuR0wJpz_WfBVRu8gocCO9Me9nf9atseFBH7JcPHfY72aumhfNnLwkml3jnw";
 
-// ✅ ใส่ค่า Config ของคุณให้ครบแล้ว
 const firebaseConfig = {
     apiKey: "AIzaSyBRCIwMv010KQ79YjHrs5zZnH_XnDNgIDQ",
     authDomain: "pos-system-4d0b5.firebaseapp.com",
@@ -15,105 +14,97 @@ const firebaseConfig = {
     measurementId: "G-YXWBJLLK4Q"
 };
 
-// Initialize Firebase
+// ==========================================
+// STATE
+// ==========================================
+let MENU = [];
+let cart = [];
+let menuChunks = {};
+let MY_REPLY_TOKEN = null;
+
+// URL Params
+const urlParams = new URLSearchParams(window.location.search);
+const MERCHANT_TOKEN = urlParams.get('token');
+
+// Elements
+const statusDiv = document.getElementById('status');
+const btnConnect = document.getElementById('btn-connect');
+const menuContainer = document.getElementById('menu-container');
+const btnOrder = document.getElementById('btn-order');
+
+// ==========================================
+// FIREBASE INIT (Lazy)
+// ==========================================
+let messaging = null;
+
+// Initialize App Immediately
 try {
     firebase.initializeApp(firebaseConfig);
-    const messaging = firebase.messaging();
+    messaging = firebase.messaging();
 
-    // Handle Incoming Menu Chunks
+    // Listener for Background/Foreground Messages
     messaging.onMessage((payload) => {
-        console.log('Message received. ', payload);
+        console.log('FCM Message:', payload);
         const data = payload.data;
-
         if (data.type === 'MENU_RESPONSE') {
             handleMenuChunk(data);
         }
     });
 } catch (e) {
-    console.error("Firebase Init Error (Check Config):", e);
+    console.error("Firebase Init Error:", e);
+    statusDiv.innerHTML = "System Error: Check Config";
 }
 
 // ==========================================
-// STATE
+// EVENTS & FLOW
 // ==========================================
-let MENU = []; // Will be loaded dynamically
-let cart = [];
-let menuChunks = {};
-let MY_REPLY_TOKEN = null;
 
-// Get Merchant Token from URL (for sending Order)
-const urlParams = new URLSearchParams(window.location.search);
-const MERCHANT_TOKEN = urlParams.get('token');
+// 1. Click-to-Connect (iOS Requirement)
+btnConnect.addEventListener('click', () => {
+    initSystem();
+});
 
-const statusDiv = document.getElementById('status');
-const btnOrder = document.getElementById('btn-order');
-
-// ==========================================
-// LOGIC: MENU CHUNKING
-// ==========================================
-function handleMenuChunk(data) {
-    const index = parseInt(data.chunk_index);
-    const total = parseInt(data.total_chunks);
-    const chunk = data.payload;
-
-    menuChunks[index] = chunk;
-    // Show progress percentage
-    statusDiv.innerHTML = `Loading Menu... ${(Object.keys(menuChunks).length / total * 100).toFixed(0)}%`;
-
-    if (Object.keys(menuChunks).length === total) {
-        // Reassemble
-        let fullJson = "";
-        for (let i = 0; i < total; i++) {
-            fullJson += menuChunks[i];
-        }
-
-        try {
-            MENU = JSON.parse(fullJson);
-            renderMenu();
-            statusDiv.innerHTML = '<span class="status-connected">✅ Menu Loaded!</span>';
-        } catch (e) {
-            console.error("Menu Parse Error", e);
-            statusDiv.innerHTML = 'Menu Error';
-        }
-    }
-}
-
-// ==========================================
-// LOGIC: INIT & REQUEST MENU
-// ==========================================
+// 2. Init Logic
 async function initSystem() {
     if (!MERCHANT_TOKEN) {
-        statusDiv.innerHTML = '<span class="status-disconnected">❌ Error: No Merchant Token in URL.</span>';
+        statusDiv.innerHTML = '<span class="status-disconnected">❌ Error: Invalid Link (No Shop Token)</span>';
         return;
     }
 
+    // UI Updates
+    btnConnect.style.display = 'none';
+    statusDiv.innerHTML = 'Requesting Permission...';
+
     try {
-        const messaging = firebase.messaging();
-        // Request Permission & Get Token
-        await Notification.requestPermission();
+        // Request Notification Permission
+        const permission = await Notification.requestPermission();
+        if (permission !== 'granted') {
+            statusDiv.innerHTML = '<span class="status-disconnected">❌ Permission Denied</span>';
+            btnConnect.style.display = 'block';
+            return;
+        }
 
-        // ✅ ใส่ VAPID Key ของคุณให้แล้ว
-        MY_REPLY_TOKEN = await messaging.getToken({
-            vapidKey: "BANMxuREDu4hfBFsBIMCc1nX1K_XuR0wJpz_WfBVRu8gocCO9Me9nf9atseFBH7JcPHfY72aumhfNnLwkml3jnw"
-        });
-
-        console.log("My Reply Token:", MY_REPLY_TOKEN);
+        // Get Token
+        statusDiv.innerHTML = 'Registering Device...';
+        MY_REPLY_TOKEN = await messaging.getToken({ vapidKey: VAPID_KEY });
+        console.log("My Token:", MY_REPLY_TOKEN);
 
         if (MY_REPLY_TOKEN) {
             requestMenuFromMerchant();
         } else {
-            statusDiv.innerHTML = 'Failed to get Reply Token';
+            throw new Error("No Token Received");
         }
 
     } catch (e) {
         console.error("Init Error:", e);
-        statusDiv.innerHTML = 'Init Failed (Check Console)';
+        statusDiv.innerHTML = '<span class="status-disconnected">❌ Connection Failed</span>';
+        btnConnect.style.display = 'block';
     }
 }
 
+// 3. Request Menu
 async function requestMenuFromMerchant() {
     statusDiv.innerHTML = 'Requesting Menu from Shop...';
-
     try {
         const response = await fetch(CLOUD_FUNCTION_URL, {
             method: 'POST',
@@ -125,25 +116,50 @@ async function requestMenuFromMerchant() {
             }),
         });
 
-        if (!response.ok) throw new Error("Cloud Function Error");
-        console.log("Menu Request Sent");
+        if (!response.ok) throw new Error("Server Error");
+        statusDiv.innerHTML = 'Waiting for Shop... (App must be running)';
 
     } catch (e) {
         console.error(e);
-        statusDiv.innerHTML = 'Request Failed (Is Shop App Running?)';
+        statusDiv.innerHTML = '❌ Server Request Failed';
     }
 }
 
+// 4. Handle Chunks
+function handleMenuChunk(data) {
+    const index = parseInt(data.chunk_index);
+    const total = parseInt(data.total_chunks);
+    const chunk = data.payload;
+
+    menuChunks[index] = chunk;
+    const receivedCount = Object.keys(menuChunks).length;
+    const percent = ((receivedCount / total) * 100).toFixed(0);
+
+    statusDiv.innerHTML = `Loading Menu... ${percent}%`;
+
+    if (receivedCount === total) {
+        let fullJson = "";
+        for (let i = 0; i < total; i++) {
+            fullJson += menuChunks[i];
+        }
+
+        try {
+            MENU = JSON.parse(fullJson);
+            renderMenu();
+            statusDiv.innerHTML = '<span class="status-connected">✅ Top-up & Pay available</span>';
+            menuContainer.style.display = 'block'; // Show Menu
+        } catch (e) {
+            console.error("Parse Error", e);
+            statusDiv.innerHTML = '❌ Menu Corrupted';
+        }
+    }
+}
 
 // ==========================================
-// UI & ORDER LOGIC
+// CART & UI
 // ==========================================
 function renderMenu() {
     const container = document.getElementById('menu');
-    if (MENU.length === 0) {
-        container.innerHTML = "<div>No Menu Items</div>";
-        return;
-    }
     container.innerHTML = MENU.map(item => `
         <div class="product-card" onclick="addToCart(${item.id})">
             <div class="product-name">${item.name}</div>
@@ -164,10 +180,11 @@ window.addToCart = (id) => {
     if (item) {
         cart.push(item);
         updateCartUI();
-        // Visual Effect
+        // Visual Click Effect
         const el = event.currentTarget;
-        el.style.backgroundColor = '#f0f0f0';
-        setTimeout(() => el.style.backgroundColor = 'white', 100);
+        const originalBg = el.style.backgroundColor;
+        el.style.backgroundColor = '#e8f5e9';
+        setTimeout(() => el.style.backgroundColor = 'white', 150);
     }
 }
 
@@ -187,7 +204,7 @@ btnOrder.addEventListener('click', async () => {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({
-                type: "ORDER", // ต้องระบุ type ว่าเป็น ORDER
+                type: "ORDER",
                 token: MERCHANT_TOKEN,
                 orderData: orderData
             }),
@@ -197,16 +214,14 @@ btnOrder.addEventListener('click', async () => {
             statusDiv.innerHTML = '<span class="status-connected">🎉 Order Sent!</span>';
             cart = [];
             updateCartUI();
-            alert("สั่งอาหารเรียบร้อยครับ!");
+            alert("Order Sent successfully!");
         } else {
             throw new Error(await response.text());
         }
     } catch (error) {
         console.error(error);
-        statusDiv.innerHTML = '<span class="status-disconnected">❌ Failed</span>';
+        statusDiv.innerHTML = '<span class="status-disconnected">❌ Send Failed</span>';
         btnOrder.disabled = false;
+        alert("Failed to send: " + error.message);
     }
 });
-
-// START
-initSystem();

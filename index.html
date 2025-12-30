@@ -5,10 +5,9 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Zero-Cost Menu</title>
-    <script src="https://unpkg.com/peerjs@1.5.2/dist/peerjs.min.js"></script>
-    <!-- Firebase SDKs -->
-    <script src="https://www.gstatic.com/firebasejs/9.6.1/firebase-app-compat.js"></script>
-    <script src="https://www.gstatic.com/firebasejs/9.6.1/firebase-messaging-compat.js"></script>
+    <!-- Firebase SDKs (Compat) -->
+    <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-app-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-messaging-compat.js"></script>
     <style>
         :root {
             --primary: #FF6B6B;
@@ -23,13 +22,13 @@
             margin: 0;
             padding: 0;
             color: var(--dark);
+            padding-bottom: 100px;
         }
 
         .container {
             max-width: 600px;
             margin: 0 auto;
             padding: 20px;
-            padding-bottom: 80px;
         }
 
         h1 {
@@ -55,6 +54,32 @@
         .status-disconnected {
             color: #e74c3c;
             font-weight: bold;
+        }
+
+        /* Connect Button (iOS Fix) */
+        #btn-connect {
+            display: block;
+            width: 100%;
+            padding: 18px;
+            background-color: var(--secondary);
+            color: white;
+            border: none;
+            border-radius: 12px;
+            font-size: 1.1rem;
+            font-weight: bold;
+            cursor: pointer;
+            margin-bottom: 20px;
+            box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+            transition: transform 0.1s;
+        }
+
+        #btn-connect:active {
+            transform: scale(0.98);
+        }
+
+        /* Menu Grid (Hidden Initially) */
+        #menu-container {
+            display: none;
         }
 
         .menu-grid {
@@ -87,6 +112,7 @@
             font-weight: bold;
         }
 
+        /* Cart Bar */
         .cart-bar {
             position: fixed;
             bottom: 0;
@@ -98,6 +124,7 @@
             display: flex;
             justify-content: space-between;
             align-items: center;
+            z-index: 100;
         }
 
         .btn-order {
@@ -124,11 +151,17 @@
         <h1>Cafe Menu</h1>
 
         <div id="status" class="status-bar">
-            Connecting to merchant...
+            Tap below to connect
         </div>
 
-        <div id="menu" class="menu-grid">
-            <!-- Items inserted by JS -->
+        <!-- Click-to-Connect Button -->
+        <button id="btn-connect">⚡ Connect to Shop</button>
+
+        <!-- Menu Area -->
+        <div id="menu-container">
+            <div id="menu" class="menu-grid">
+                <!-- Items inserted by JS -->
+            </div>
         </div>
     </div>
 
