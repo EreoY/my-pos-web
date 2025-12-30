@@ -1,10 +1,14 @@
 <!DOCTYPE html>
 <html lang="en">
+
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Zero-Cost Menu</title>
     <script src="https://unpkg.com/peerjs@1.5.2/dist/peerjs.min.js"></script>
+    <!-- Firebase SDKs -->
+    <script src="https://www.gstatic.com/firebasejs/9.6.1/firebase-app-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/9.6.1/firebase-messaging-compat.js"></script>
     <style>
         :root {
             --primary: #FF6B6B;
@@ -12,6 +16,7 @@
             --dark: #2D3436;
             --light: #F7F9FC;
         }
+
         body {
             font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
             background-color: var(--light);
@@ -19,53 +24,69 @@
             padding: 0;
             color: var(--dark);
         }
+
         .container {
             max-width: 600px;
             margin: 0 auto;
             padding: 20px;
             padding-bottom: 80px;
         }
+
         h1 {
             text-align: center;
             color: var(--primary);
         }
+
         .status-bar {
             text-align: center;
             padding: 10px;
             background: #fff;
             border-radius: 8px;
             margin-bottom: 20px;
-            box-shadow: 0 2px 5px rgba(0,0,0,0.05);
+            box-shadow: 0 2px 5px rgba(0, 0, 0, 0.05);
             font-size: 0.9em;
         }
-        .status-connected { color: #2ecc71; font-weight: bold; }
-        .status-disconnected { color: #e74c3c; font-weight: bold; }
-        
+
+        .status-connected {
+            color: #2ecc71;
+            font-weight: bold;
+        }
+
+        .status-disconnected {
+            color: #e74c3c;
+            font-weight: bold;
+        }
+
         .menu-grid {
             display: grid;
             grid-template-columns: repeat(auto-fill, minmax(140px, 1fr));
             gap: 15px;
         }
+
         .product-card {
             background: white;
             padding: 15px;
             border-radius: 12px;
-            box-shadow: 0 4px 6px rgba(0,0,0,0.05);
+            box-shadow: 0 4px 6px rgba(0, 0, 0, 0.05);
             text-align: center;
             transition: transform 0.2s;
             cursor: pointer;
         }
+
         .product-card:active {
             transform: scale(0.95);
         }
+
         .product-name {
             font-weight: 600;
             margin: 10px 0 5px 0;
         }
+
         .product-price {
             color: var(--primary);
             font-weight: bold;
         }
+
         .cart-bar {
             position: fixed;
             bottom: 0;
@@ -73,11 +94,12 @@
             right: 0;
             background: white;
             padding: 15px;
-            box-shadow: 0 -2px 10px rgba(0,0,0,0.1);
+            box-shadow: 0 -2px 10px rgba(0, 0, 0, 0.1);
             display: flex;
             justify-content: space-between;
             align-items: center;
         }
+
         .btn-order {
             background: var(--primary);
             color: white;
@@ -88,34 +110,37 @@
             font-size: 1rem;
             cursor: pointer;
         }
+
         .btn-order:disabled {
             background: #ccc;
             cursor: not-allowed;
         }
     </style>
 </head>
+
 <body>
 
-<div class="container">
-    <h1>Cafe Menu</h1>
-    
-    <div id="status" class="status-bar">
-        Connecting to merchant...
+    <div class="container">
+        <h1>Cafe Menu</h1>
+
+        <div id="status" class="status-bar">
+            Connecting to merchant...
+        </div>
+
+        <div id="menu" class="menu-grid">
+            <!-- Items inserted by JS -->
+        </div>
     </div>
 
-    <div id="menu" class="menu-grid">
-        <!-- Items inserted by JS -->
+    <div class="cart-bar">
+        <div>
+            <strong>Total:</strong> <span id="total-price">$0.00</span>
+            <div style="font-size:0.8em; color:#666" id="item-count">0 items</div>
+        </div>
+        <button id="btn-order" class="btn-order" disabled>Place Order</button>
     </div>
-</div>
 
-<div class="cart-bar">
-    <div>
-        <strong>Total:</strong> <span id="total-price">$0.00</span>
-        <div style="font-size:0.8em; color:#666" id="item-count">0 items</div>
-    </div>
-    <button id="btn-order" class="btn-order" disabled>Place Order</button>
-</div>
-
-<script src="script.js"></script>
+    <script src="script.js"></script>
 </body>
+
 </html>

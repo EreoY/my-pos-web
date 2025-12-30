@@ -1,36 +1,141 @@
 // ==========================================
-// CONFIGURATION (ตั้งค่าระบบ)
+// CONFIGURATION
 // ==========================================
-
-// ✅ ลิ้งค์ Cloud Function ของคุณ (ใส่ให้แล้วครับ)
 const CLOUD_FUNCTION_URL = "https://us-central1-pos-system-4d0b5.cloudfunctions.net/sendOrder";
 
-// เมนูอาหาร (ตัวอย่าง)
-const MENU = [
-    { id: 1, name: "Espresso", price: 2.50 },
-    { id: 2, name: "Cappuccino", price: 3.50 },
-    { id: 3, name: "Latte", price: 3.75 },
-    { id: 4, name: "Mocha", price: 4.00 },
-    { id: 5, name: "Americano", price: 2.75 },
-    { id: 6, name: "Croissant", price: 3.00 },
-];
+// [USER CONFIG] Paste Your Firebase Web Config Here
+const firebaseConfig = {
+    apiKey: "YOUR_API_KEY",
+    authDomain: "YOUR_PROJECT.firebaseapp.com",
+    projectId: "YOUR_PROJECT_ID",
+    storageBucket: "YOUR_PROJECT.appspot.com",
+    messagingSenderId: "YOUR_SENDER_ID",
+    appId: "YOUR_APP_ID"
+};
+
+// Initialize Firebase
+try {
+    firebase.initializeApp(firebaseConfig);
+    const messaging = firebase.messaging();
+
+    // Handle Incoming Menu Chunks
+    messaging.onMessage((payload) => {
+        console.log('Message received. ', payload);
+        const data = payload.data;
+
+        if (data.type === 'MENU_RESPONSE') {
+            handleMenuChunk(data);
+        }
+    });
+} catch (e) {
+    console.error("Firebase Init Error (Check Config):", e);
+}
 
 // ==========================================
-// SYSTEM LOGIC
+// STATE
 // ==========================================
-
+let MENU = []; // Will be loaded dynamically
 let cart = [];
+let menuChunks = {};
+let MY_REPLY_TOKEN = null;
 
-// 1. ดึง Token จาก URL (ที่มาจากการสแกน QR)
+// Get Merchant Token from URL (for sending Order)
 const urlParams = new URLSearchParams(window.location.search);
-const DEVICE_TOKEN = urlParams.get('token');
+const MERCHANT_TOKEN = urlParams.get('token');
 
 const statusDiv = document.getElementById('status');
 const btnOrder = document.getElementById('btn-order');
 
-// ฟังก์ชันแสดงเมนู
+// ==========================================
+// LOGIC: MENU CHUNKING
+// ==========================================
+function handleMenuChunk(data) {
+    const index = parseInt(data.chunk_index);
+    const total = parseInt(data.total_chunks);
+    const chunk = data.payload;
+
+    menuChunks[index] = chunk;
+    statusDiv.innerHTML = `Loading Menu... ${(Object.keys(menuChunks).length / total * 100).toFixed(0)}%`;
+
+    if (Object.keys(menuChunks).length === total) {
+        // Reassemble
+        let fullJson = "";
+        for (let i = 0; i < total; i++) {
+            fullJson += menuChunks[i];
+        }
+
+        try {
+            MENU = JSON.parse(fullJson);
+            renderMenu();
+            statusDiv.innerHTML = '<span class="status-connected">✅ Menu Loaded!</span>';
+        } catch (e) {
+            console.error("Menu Parse Error", e);
+            statusDiv.innerHTML = 'Menu Error';
+        }
+    }
+}
+
+// ==========================================
+// LOGIC: INIT & REQUEST MENU
+// ==========================================
+async function initSystem() {
+    if (!MERCHANT_TOKEN) {
+        statusDiv.innerHTML = '<span class="status-disconnected">❌ Error: No Merchant Token.</span>';
+        return;
+    }
+
+    try {
+        const messaging = firebase.messaging();
+        // Request Permission & Get Token
+        await Notification.requestPermission();
+        MY_REPLY_TOKEN = await messaging.getToken({ vapidKey: "YOUR_VAPID_KEY" }); // Optional: Add Vapid Key if needed
+
+        console.log("My Reply Token:", MY_REPLY_TOKEN);
+
+        if (MY_REPLY_TOKEN) {
+            requestMenuFromMerchant();
+        } else {
+            statusDiv.innerHTML = 'Failed to get Reply Token';
+        }
+
+    } catch (e) {
+        console.error("Init Error:", e);
+        statusDiv.innerHTML = 'Init Failed (Check Console)';
+    }
+}
+
+async function requestMenuFromMerchant() {
+    statusDiv.innerHTML = 'Requesting Menu...';
+
+    try {
+        const response = await fetch(CLOUD_FUNCTION_URL, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+                type: "MENU_REQUEST",
+                merchant_token: MERCHANT_TOKEN,
+                reply_token: MY_REPLY_TOKEN
+            }),
+        });
+
+        if (!response.ok) throw new Error("Cloud Function Error");
+        console.log("Menu Request Sent");
+
+    } catch (e) {
+        statusDiv.innerHTML = 'Request Failed';
+    }
+}
+
+
+// ==========================================
+// UI & ORDER LOGIC
+// ==========================================
 function renderMenu() {
     const container = document.getElementById('menu');
+    if (MENU.length === 0) {
+        container.innerHTML = "<div>No Menu Items</div>";
+        return;
+    }
     container.innerHTML = MENU.map(item => `
         <div class="product-card" onclick="addToCart(${item.id})">
             <div class="product-name">${item.name}</div>
@@ -39,22 +144,18 @@ function renderMenu() {
     `).join('');
 }
 
-// อัปเดตตระกร้าสินค้า
 function updateCartUI() {
     const total = cart.reduce((sum, item) => sum + item.price, 0);
     document.getElementById('total-price').innerText = `$${total.toFixed(2)}`;
     document.getElementById('item-count').innerText = `${cart.length} items`;
-
     btnOrder.disabled = cart.length === 0;
 }
 
-// เพิ่มสินค้า
 window.addToCart = (id) => {
     const item = MENU.find(m => m.id === id);
     if (item) {
         cart.push(item);
         updateCartUI();
-
         // Effect
         const el = event.currentTarget;
         el.style.backgroundColor = '#f0f0f0';
@@ -62,19 +163,7 @@ window.addToCart = (id) => {
     }
 }
 
-// ตรวจสอบความพร้อม
-if (!DEVICE_TOKEN) {
-    statusDiv.innerHTML = '<span class="status-disconnected">❌ Error: No Token. Scan QR again.</span>';
-    btnOrder.disabled = true;
-} else {
-    statusDiv.innerHTML = '<span class="status-connected">✅ Ready to Order</span>';
-}
-
-// ==========================================
-// SENDING LOGIC (ส่งข้อมูลไป Cloud Functions)
-// ==========================================
 btnOrder.addEventListener('click', async () => {
-    // เตรียมข้อมูลออเดอร์
     const orderData = {
         table: "1",
         items: cart,
@@ -82,20 +171,15 @@ btnOrder.addEventListener('click', async () => {
         timestamp: Date.now()
     };
 
-    statusDiv.innerHTML = '🚀 Sending Order to Cloud...';
+    statusDiv.innerHTML = '🚀 Sending Order...';
     btnOrder.disabled = true;
 
     try {
-        // ยิงไปที่ Cloud Function (Plan A)
         const response = await fetch(CLOUD_FUNCTION_URL, {
             method: 'POST',
-            headers: {
-                'Content-Type': 'application/json',
-            },
+            headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({
-                // ส่ง Token ไปบอก Server ว่าต้องแจ้งเตือนเครื่องไหน
-                token: DEVICE_TOKEN,
-                // ข้อมูลออเดอร์
+                token: MERCHANT_TOKEN,
                 orderData: orderData
             }),
         });
@@ -106,16 +190,14 @@ btnOrder.addEventListener('click', async () => {
             updateCartUI();
             alert("สั่งอาหารเรียบร้อยครับ!");
         } else {
-            const err = await response.text();
-            throw new Error(err);
+            throw new Error(await response.text());
         }
     } catch (error) {
         console.error(error);
         statusDiv.innerHTML = '<span class="status-disconnected">❌ Failed</span>';
-        alert("เกิดข้อผิดพลาด: " + error.message);
         btnOrder.disabled = false;
     }
 });
 
-// เริ่มทำงาน
-renderMenu();
+// START
+initSystem();
