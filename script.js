@@ -1,16 +1,18 @@
 // ==========================================
 // CONFIGURATION
 // ==========================================
-const CLOUD_FUNCTION_URL = "https://us-central1-pos-system-4d0b5.cloudfunctions.net/sendOrder";
+// ✅ ใช้ URL ใหม่ (Gen 2) ที่ถูกต้อง
+const CLOUD_FUNCTION_URL = "https://sendorder-xtqo4x663a-uc.a.run.app";
 
-// [USER CONFIG] Paste Your Firebase Web Config Here
+// ✅ ใส่ค่า Config ของคุณให้ครบแล้ว
 const firebaseConfig = {
-    apiKey: "YOUR_API_KEY",
-    authDomain: "YOUR_PROJECT.firebaseapp.com",
-    projectId: "YOUR_PROJECT_ID",
-    storageBucket: "YOUR_PROJECT.appspot.com",
-    messagingSenderId: "YOUR_SENDER_ID",
-    appId: "YOUR_APP_ID"
+    apiKey: "AIzaSyBRCIwMv010KQ79YjHrs5zZnH_XnDNgIDQ",
+    authDomain: "pos-system-4d0b5.firebaseapp.com",
+    projectId: "pos-system-4d0b5",
+    storageBucket: "pos-system-4d0b5.firebasestorage.app",
+    messagingSenderId: "948004280034",
+    appId: "1:948004280034:web:0c25c409673bb25ee8f0bb",
+    measurementId: "G-YXWBJLLK4Q"
 };
 
 // Initialize Firebase
@@ -55,6 +57,7 @@ function handleMenuChunk(data) {
     const chunk = data.payload;
 
     menuChunks[index] = chunk;
+    // Show progress percentage
     statusDiv.innerHTML = `Loading Menu... ${(Object.keys(menuChunks).length / total * 100).toFixed(0)}%`;
 
     if (Object.keys(menuChunks).length === total) {
@@ -80,7 +83,7 @@ function handleMenuChunk(data) {
 // ==========================================
 async function initSystem() {
     if (!MERCHANT_TOKEN) {
-        statusDiv.innerHTML = '<span class="status-disconnected">❌ Error: No Merchant Token.</span>';
+        statusDiv.innerHTML = '<span class="status-disconnected">❌ Error: No Merchant Token in URL.</span>';
         return;
     }
 
@@ -88,7 +91,11 @@ async function initSystem() {
         const messaging = firebase.messaging();
         // Request Permission & Get Token
         await Notification.requestPermission();
-        MY_REPLY_TOKEN = await messaging.getToken({ vapidKey: "YOUR_VAPID_KEY" }); // Optional: Add Vapid Key if needed
+
+        // ✅ ใส่ VAPID Key ของคุณให้แล้ว
+        MY_REPLY_TOKEN = await messaging.getToken({
+            vapidKey: "BANMxuREDu4hfBFsBIMCc1nX1K_XuR0wJpz_WfBVRu8gocCO9Me9nf9atseFBH7JcPHfY72aumhfNnLwkml3jnw"
+        });
 
         console.log("My Reply Token:", MY_REPLY_TOKEN);
 
@@ -105,7 +112,7 @@ async function initSystem() {
 }
 
 async function requestMenuFromMerchant() {
-    statusDiv.innerHTML = 'Requesting Menu...';
+    statusDiv.innerHTML = 'Requesting Menu from Shop...';
 
     try {
         const response = await fetch(CLOUD_FUNCTION_URL, {
@@ -122,7 +129,8 @@ async function requestMenuFromMerchant() {
         console.log("Menu Request Sent");
 
     } catch (e) {
-        statusDiv.innerHTML = 'Request Failed';
+        console.error(e);
+        statusDiv.innerHTML = 'Request Failed (Is Shop App Running?)';
     }
 }
 
@@ -156,7 +164,7 @@ window.addToCart = (id) => {
     if (item) {
         cart.push(item);
         updateCartUI();
-        // Effect
+        // Visual Effect
         const el = event.currentTarget;
         el.style.backgroundColor = '#f0f0f0';
         setTimeout(() => el.style.backgroundColor = 'white', 100);
@@ -179,6 +187,7 @@ btnOrder.addEventListener('click', async () => {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({
+                type: "ORDER", // ต้องระบุ type ว่าเป็น ORDER
                 token: MERCHANT_TOKEN,
                 orderData: orderData
             }),
