@@ -37,9 +37,11 @@ const btnOrder = document.getElementById('btn-order');
 // ==========================================
 let messaging = null;
 
-// Initialize App Immediately
+// Initialize App Immediately (for Listener)
 try {
-    firebase.initializeApp(firebaseConfig);
+    if (!firebase.apps.length) {
+        firebase.initializeApp(firebaseConfig);
+    }
     messaging = firebase.messaging();
 
     // Listener for Background/Foreground Messages
@@ -64,7 +66,7 @@ btnConnect.addEventListener('click', () => {
     initSystem();
 });
 
-// 2. Init Logic
+// 2. Init Logic (FIXED: Manual SW Registration)
 async function initSystem() {
     if (!MERCHANT_TOKEN) {
         statusDiv.innerHTML = '<span class="status-disconnected">❌ Error: Invalid Link (No Shop Token)</span>';
@@ -84,9 +86,28 @@ async function initSystem() {
             return;
         }
 
-        // Get Token
-        statusDiv.innerHTML = 'Registering Device...';
-        MY_REPLY_TOKEN = await messaging.getToken({ vapidKey: VAPID_KEY });
+        statusDiv.innerHTML = 'Registering Service Worker...';
+
+        // FIX: Manually register Service Worker to handle GitHub Pages subdirectory path
+        if ('serviceWorker' in navigator) {
+            try {
+                const registration = await navigator.serviceWorker.register('./firebase-messaging-sw.js', { scope: './' });
+                console.log('Service Worker Registered');
+
+                // Pass registration to getToken
+                MY_REPLY_TOKEN = await messaging.getToken({
+                    vapidKey: VAPID_KEY,
+                    serviceWorkerRegistration: registration
+                });
+            } catch (err) {
+                console.error("SW Registration Failed", err);
+                throw new Error("SW Registration Failed");
+            }
+        } else {
+            // Fallback for browsers without SW support
+            MY_REPLY_TOKEN = await messaging.getToken({ vapidKey: VAPID_KEY });
+        }
+
         console.log("My Token:", MY_REPLY_TOKEN);
 
         if (MY_REPLY_TOKEN) {
@@ -161,11 +182,11 @@ function handleMenuChunk(data) {
 function renderMenu() {
     const container = document.getElementById('menu');
     container.innerHTML = MENU.map(item => `
-        <div class="product-card" onclick="addToCart(${item.id})">
-            <div class="product-name">${item.name}</div>
-            <div class="product-price">$${item.price.toFixed(2)}</div>
-        </div>
-    `).join('');
+         <div class="product-card" onclick="addToCart(${item.id})">
+             <div class="product-name">${item.name}</div>
+             <div class="product-price">$${item.price.toFixed(2)}</div>
+         </div>
+     `).join('');
 }
 
 function updateCartUI() {
