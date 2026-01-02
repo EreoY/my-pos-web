@@ -1,8 +1,6 @@
-// ==========================================
-// CONFIGURATION (Hardcoded)
-// ==========================================
+// [FILE: script.js]
+const R2_BASE_URL = "https://pub-95a66e290b0b4a03ad1abcef6de8b7da.r2.dev";
 const CLOUD_FUNCTION_URL = "https://sendorder-xtqo4x663a-uc.a.run.app";
-const VAPID_KEY = "BANMxuREDu4hfBFsBIMCc1nX1K_XuR0wJpz_WfBVRu8gocCO9Me9nf9atseFBH7JcPHfY72aumhfNnLwkml3jnw";
 
 const firebaseConfig = {
     apiKey: "AIzaSyBRCIwMv010KQ79YjHrs5zZnH_XnDNgIDQ",
@@ -14,231 +12,110 @@ const firebaseConfig = {
     measurementId: "G-YXWBJLLK4Q"
 };
 
-// ==========================================
-// STATE
-// ==========================================
 let MENU = [];
 let cart = [];
-let menuChunks = {};
-let MY_REPLY_TOKEN = null;
-
-// URL Params
 const urlParams = new URLSearchParams(window.location.search);
-const MERCHANT_TOKEN = urlParams.get('token');
+const SHOP_ID = urlParams.get('shop_id');
+const TABLE_NO = urlParams.get('table') || "1";
 
-// Elements
 const statusDiv = document.getElementById('status');
-const btnConnect = document.getElementById('btn-connect');
 const menuContainer = document.getElementById('menu-container');
 const btnOrder = document.getElementById('btn-order');
 
-// ==========================================
-// FIREBASE INIT (Lazy)
-// ==========================================
-let messaging = null;
-
-try {
-    if (!firebase.apps.length) {
-        firebase.initializeApp(firebaseConfig);
-    }
-    messaging = firebase.messaging();
-
-    messaging.onMessage((payload) => {
-        console.log('FCM Message:', payload);
-        const data = payload.data;
-        if (data.type === 'MENU_RESPONSE') {
-            handleMenuChunk(data);
-        }
-    });
-} catch (e) {
-    console.error("Firebase Init Error:", e);
-    statusDiv.innerHTML = "System Error: Check Config";
-}
-
-// ==========================================
-// EVENTS & FLOW
-// ==========================================
-
-btnConnect.addEventListener('click', () => {
-    initSystem();
-});
-
-// ✅ ฟังก์ชันเริ่มระบบ (ฉบับแก้ใจร้อน: รอ Service Worker ตื่นก่อน)
-async function initSystem() {
-    if (!MERCHANT_TOKEN) {
-        statusDiv.innerHTML = '<span class="status-disconnected">❌ Error: Invalid Link (No Shop Token)</span>';
+window.onload = async () => {
+    if (!SHOP_ID) {
+        statusDiv.innerHTML = '<span style="color:red; font-weight:bold;">❌ Error: Invalid Link (No Shop ID)</span><br>Please scan the QR code again.';
         return;
     }
-
-    btnConnect.style.display = 'none';
-    statusDiv.innerHTML = 'Requesting Permission...';
-
     try {
-        const permission = await Notification.requestPermission();
-        if (permission !== 'granted') {
-            statusDiv.innerHTML = '<span class="status-disconnected">❌ Permission Denied</span>';
-            btnConnect.style.display = 'block';
-            return;
-        }
+        if (!firebase.apps.length) firebase.initializeApp(firebaseConfig);
+    } catch (e) { console.error("Firebase Init Error:", e); }
 
-        statusDiv.innerHTML = 'Registering Service Worker...';
+    await loadMenuFromCloudflare();
+};
 
-        if ('serviceWorker' in navigator) {
-            // 1. ลงทะเบียน (เหมือนเดิม)
-            const registration = await navigator.serviceWorker.register('/my-pos-web/firebase-messaging-sw.js', {
-                scope: '/my-pos-web/'
-            });
-            console.log('Service Worker Registered');
-
-            // ⚠️ 2. เพิ่มบรรทัดนี้: รอให้ Service Worker พร้อมใช้งานจริงๆ ก่อน (Active)
-            statusDiv.innerHTML = 'Waiting for SW ready...';
-            await navigator.serviceWorker.ready;
-            console.log('Service Worker is Ready!');
-
-            // 3. ค่อยขอ Token
-            MY_REPLY_TOKEN = await messaging.getToken({
-                vapidKey: VAPID_KEY,
-                serviceWorkerRegistration: registration
-            });
-        } else {
-            MY_REPLY_TOKEN = await messaging.getToken({ vapidKey: VAPID_KEY });
-        }
-
-        console.log("My Token:", MY_REPLY_TOKEN);
-
-        if (MY_REPLY_TOKEN) {
-            requestMenuFromMerchant();
-        } else {
-            throw new Error("No Token Received");
-        }
-
-    } catch (e) {
-        console.error("Init Error:", e);
-        // แสดง Error ชัดๆ บนหน้าจอ
-        statusDiv.innerHTML = `<span class="status-disconnected">❌ Error: ${e.message}</span>`;
-        btnConnect.style.display = 'block';
-    }
-}
-
-// 3. Request Menu
-async function requestMenuFromMerchant() {
-    statusDiv.innerHTML = 'Requesting Menu from Shop...';
+async function loadMenuFromCloudflare() {
+    statusDiv.innerHTML = '📥 Loading Menu...';
     try {
-        const response = await fetch(CLOUD_FUNCTION_URL, {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({
-                type: "MENU_REQUEST",
-                merchant_token: MERCHANT_TOKEN,
-                reply_token: MY_REPLY_TOKEN
-            }),
-        });
+        const menuUrl = `${R2_BASE_URL}/menu_${SHOP_ID}.json?t=${Date.now()}`;
+        console.log("Fetching:", menuUrl);
+        const response = await fetch(menuUrl);
+        if (!response.ok) throw new Error("Menu not found. Shop might not have published yet.");
 
-        if (!response.ok) throw new Error("Server Error");
-        statusDiv.innerHTML = 'Waiting for Shop... (App must be running)';
+        const data = await response.json();
+        MENU = data.items || data;
+        renderMenu();
 
+        statusDiv.innerHTML = '<span style="color:green; font-weight:bold;">✅ Ready to Order</span>';
+        if (menuContainer) menuContainer.style.display = 'block';
     } catch (e) {
-        console.error(e);
-        statusDiv.innerHTML = '❌ Server Request Failed';
+        console.error("Load Error:", e);
+        statusDiv.innerHTML = `<span style="color:red">❌ Failed to load menu: ${e.message}</span>`;
     }
 }
 
-// 4. Handle Chunks
-function handleMenuChunk(data) {
-    const index = parseInt(data.chunk_index);
-    const total = parseInt(data.total_chunks);
-    const chunk = data.payload;
-
-    menuChunks[index] = chunk;
-    const receivedCount = Object.keys(menuChunks).length;
-    const percent = ((receivedCount / total) * 100).toFixed(0);
-
-    statusDiv.innerHTML = `Loading Menu... ${percent}%`;
-
-    if (receivedCount === total) {
-        let fullJson = "";
-        for (let i = 0; i < total; i++) {
-            fullJson += menuChunks[i];
-        }
-
-        try {
-            MENU = JSON.parse(fullJson);
-            renderMenu();
-            statusDiv.innerHTML = '<span class="status-connected">✅ Top-up & Pay available</span>';
-            menuContainer.style.display = 'block';
-        } catch (e) {
-            console.error("Parse Error", e);
-            statusDiv.innerHTML = '❌ Menu Corrupted';
-        }
-    }
-}
-
-// ==========================================
-// CART & UI
-// ==========================================
 function renderMenu() {
     const container = document.getElementById('menu');
+    if (!container) return;
+    if (MENU.length === 0) {
+        container.innerHTML = '<div style="text-align:center;">No items.</div>';
+        return;
+    }
     container.innerHTML = MENU.map(item => `
-         <div class="product-card" onclick="addToCart(${item.id})">
-             <div class="product-name">${item.name}</div>
-             <div class="product-price">$${item.price.toFixed(2)}</div>
+         <div class="product-card" onclick="addToCart('${item.id}')" style="border:1px solid #ddd; margin:10px; padding:10px; border-radius:8px; background:white;">
+             ${item.imageUrl ? `<img src="${item.imageUrl}" style="width:100%; height:150px; object-fit:cover; border-radius:8px;">` : ''}
+             <div class="product-name" style="font-weight:bold; margin-top:10px;">${item.name}</div>
+             <div class="product-price" style="color:green;">$${item.price}</div>
          </div>
      `).join('');
 }
 
-function updateCartUI() {
-    const total = cart.reduce((sum, item) => sum + item.price, 0);
-    document.getElementById('total-price').innerText = `$${total.toFixed(2)}`;
-    document.getElementById('item-count').innerText = `${cart.length} items`;
-    btnOrder.disabled = cart.length === 0;
-}
-
 window.addToCart = (id) => {
-    const item = MENU.find(m => m.id === id);
+    const item = MENU.find(m => String(m.id) === String(id));
     if (item) {
         cart.push(item);
         updateCartUI();
-        const el = event.currentTarget;
-        const originalBg = el.style.backgroundColor;
-        el.style.backgroundColor = '#e8f5e9';
-        setTimeout(() => el.style.backgroundColor = 'white', 150);
     }
 }
 
-btnOrder.addEventListener('click', async () => {
-    const orderData = {
-        table: "1",
-        items: cart,
-        total: cart.reduce((sum, item) => sum + item.price, 0),
-        timestamp: Date.now()
-    };
+function updateCartUI() {
+    const total = cart.reduce((sum, item) => sum + item.price, 0);
+    const totalEl = document.getElementById('total-price');
+    const countEl = document.getElementById('item-count');
+    if (totalEl) totalEl.innerText = `$${total.toFixed(2)}`;
+    if (countEl) countEl.innerText = `${cart.length} items`;
+    if (btnOrder) btnOrder.disabled = cart.length === 0;
+}
 
-    statusDiv.innerHTML = '🚀 Sending Order...';
-    btnOrder.disabled = true;
-
-    try {
-        const response = await fetch(CLOUD_FUNCTION_URL, {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({
-                type: "ORDER",
-                token: MERCHANT_TOKEN,
-                orderData: orderData
-            }),
-        });
-
-        if (response.ok) {
-            statusDiv.innerHTML = '<span class="status-connected">🎉 Order Sent!</span>';
-            cart = [];
-            updateCartUI();
-            alert("Order Sent successfully!");
-        } else {
-            throw new Error(await response.text());
+if (btnOrder) {
+    btnOrder.addEventListener('click', async () => {
+        statusDiv.innerHTML = '🚀 Sending Order...';
+        btnOrder.disabled = true;
+        try {
+            const response = await fetch(CLOUD_FUNCTION_URL, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    type: "ORDER",
+                    shopId: SHOP_ID,
+                    orderData: {
+                        shopId: SHOP_ID,
+                        table: TABLE_NO,
+                        items: cart,
+                        total: cart.reduce((sum, item) => sum + item.price, 0),
+                        timestamp: Date.now()
+                    }
+                }),
+            });
+            if (response.ok) {
+                statusDiv.innerHTML = '<span style="color:green;">🎉 Order Sent!</span>';
+                cart = [];
+                updateCartUI();
+                alert("Order Sent!");
+            } else { throw new Error(await response.text()); }
+        } catch (error) {
+            statusDiv.innerHTML = '<span style="color:red">❌ Send Failed</span>';
+            btnOrder.disabled = false;
         }
-    } catch (error) {
-        console.error(error);
-        statusDiv.innerHTML = '<span class="status-disconnected">❌ Send Failed</span>';
-        btnOrder.disabled = false;
-        alert("Failed to send: " + error.message);
-    }
-});
+    });
+}
