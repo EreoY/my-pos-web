@@ -103,7 +103,7 @@ if (btnOrder) {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({
-                    type: "ORDER",
+
                     type: "ORDER",
                     shopId: SHOP_ID,
                     fcmToken: TARGET_FCM_TOKEN,
