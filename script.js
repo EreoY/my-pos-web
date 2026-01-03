@@ -13,7 +13,7 @@ const firebaseConfig = {
 };
 
 let MENU = [];
-window.FCM_TOKEN = null;
+let TARGET_FCM_TOKEN = null;
 let cart = [];
 const urlParams = new URLSearchParams(window.location.search);
 const SHOP_ID = urlParams.get('shop_id');
@@ -44,12 +44,13 @@ async function loadMenuFromCloudflare() {
         if (!response.ok) throw new Error("Menu not found. Shop might not have published yet.");
 
         const data = await response.json();
-        if (data.items) {
-            MENU = data.items;
-            window.FCM_TOKEN = data.fcmToken;
-        } else {
-            MENU = data;
+
+        if (data.fcmToken) {
+            TARGET_FCM_TOKEN = data.fcmToken;
+            console.log("Target Token:", TARGET_FCM_TOKEN);
         }
+
+        MENU = data.items || data;
         renderMenu();
 
         statusDiv.innerHTML = '<span style="color:green; font-weight:bold;">✅ Ready to Order</span>';
@@ -103,8 +104,9 @@ if (btnOrder) {
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({
                     type: "ORDER",
+                    type: "ORDER",
                     shopId: SHOP_ID,
-                    fcmToken: window.FCM_TOKEN,
+                    fcmToken: TARGET_FCM_TOKEN,
                     orderData: {
                         shopId: SHOP_ID,
                         table: TABLE_NO,
