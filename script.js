@@ -106,14 +106,13 @@ if (btnOrder) {
                     shopId: SHOP_ID,
                     fcmToken: window.FCM_TOKEN,
                     orderData: {
-                        orderData: {
-                            shopId: SHOP_ID,
-                            table: TABLE_NO,
-                            items: cart,
-                            total: cart.reduce((sum, item) => sum + item.price, 0),
-                            timestamp: Date.now()
-                        }
-                    }),
+                        shopId: SHOP_ID,
+                        table: TABLE_NO,
+                        items: cart,
+                        total: cart.reduce((sum, item) => sum + item.price, 0),
+                        timestamp: Date.now()
+                    }
+                }),
             });
             if (response.ok) {
                 statusDiv.innerHTML = '<span style="color:green;">🎉 Order Sent!</span>';
