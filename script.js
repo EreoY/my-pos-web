@@ -13,6 +13,7 @@ const firebaseConfig = {
 };
 
 let MENU = [];
+window.FCM_TOKEN = null;
 let cart = [];
 const urlParams = new URLSearchParams(window.location.search);
 const SHOP_ID = urlParams.get('shop_id');
@@ -43,7 +44,12 @@ async function loadMenuFromCloudflare() {
         if (!response.ok) throw new Error("Menu not found. Shop might not have published yet.");
 
         const data = await response.json();
-        MENU = data.items || data;
+        if (data.items) {
+            MENU = data.items;
+            window.FCM_TOKEN = data.fcmToken;
+        } else {
+            MENU = data;
+        }
         renderMenu();
 
         statusDiv.innerHTML = '<span style="color:green; font-weight:bold;">✅ Ready to Order</span>';
@@ -98,14 +104,16 @@ if (btnOrder) {
                 body: JSON.stringify({
                     type: "ORDER",
                     shopId: SHOP_ID,
+                    fcmToken: window.FCM_TOKEN,
                     orderData: {
-                        shopId: SHOP_ID,
-                        table: TABLE_NO,
-                        items: cart,
-                        total: cart.reduce((sum, item) => sum + item.price, 0),
-                        timestamp: Date.now()
-                    }
-                }),
+                        orderData: {
+                            shopId: SHOP_ID,
+                            table: TABLE_NO,
+                            items: cart,
+                            total: cart.reduce((sum, item) => sum + item.price, 0),
+                            timestamp: Date.now()
+                        }
+                    }),
             });
             if (response.ok) {
                 statusDiv.innerHTML = '<span style="color:green;">🎉 Order Sent!</span>';
