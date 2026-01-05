@@ -108,7 +108,7 @@ async function requestOpen() {
 async function loadMenu() {
     statusDiv.innerHTML = '📥 Loading Menu...';
     try {
-        const menuUrl = `${R2_BASE_URL}/menu_${SHOP_ID}.json?t=${Date.now()}`;
+        const menuUrl = `${R2_BASE_URL}/shops/${SHOP_ID}/menu.json?t=${Date.now()}`;
         const response = await fetch(menuUrl);
         if (!response.ok) throw new Error("Menu file not found");
 
