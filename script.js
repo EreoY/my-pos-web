@@ -35,7 +35,8 @@ window.onload = async () => {
 async function checkSession() {
     try {
         // Cache busting ?t=Timestamp
-        const sessionUrl = `${R2_BASE_URL}/shops/${SHOP_ID}/tables/${TABLE_NO}/active_session.json?t=${Date.now()}`;
+        // Check Anchor File (Folder Wipeout Strategy)
+        const sessionUrl = `${R2_BASE_URL}/shops/${SHOP_ID}/tables/${TABLE_NO}/session.json?t=${Date.now()}`;
         console.log("Checking Session:", sessionUrl);
 
         const response = await fetch(sessionUrl);
