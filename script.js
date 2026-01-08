@@ -54,26 +54,112 @@ async function checkSession() {
     }
 }
 
+// --- POLLING STATE ---
+let POLL_ATTEMPTS = 0;
+let POLL_INTERVAL = null;
+let COUNTDOWN_INTERVAL = null;
+
 function showClosedState() {
+    // Clear any existing intervals if we land back here
+    stopPolling();
+
     document.getElementById('menu-container').innerHTML = `
-        <div style="text-align:center; padding:50px; color:#aaa;">
-            <h3>Restaraunt/Table Closed</h3>
-            <button onclick="requestOpen()" style="padding:15px;background:#37ec13;border:none;border-radius:10px;font-weight:bold;">Request Service</button>
+        <div style="text-align:center; padding:50px; color:#aaa;" id="closed-state-ui">
+            <h3>Restaurant/Table Closed</h3>
+            <button onclick="requestOpen()" class="primary-btn" style="padding:15px; width:200px; margin-top:20px;">Request Service</button>
         </div>
     `;
 }
 
 async function requestOpen() {
-    document.getElementById('status').innerText = "Requesting Staff...";
+    const ui = document.getElementById('closed-state-ui');
+    ui.innerHTML = `<h3>Requesting...</h3>`;
+
     try {
         await fetch(CLOUD_FUNCTION_URL, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({ type: "REQUEST_OPEN", shopId: SHOP_ID, tableId: TABLE_NO })
         });
-        // Start polling
-        setInterval(checkSession, 3000);
-    } catch (e) { alert("Error requesting open"); }
+
+        // Start Smart Polling (3 attempts)
+        POLL_ATTEMPTS = 3;
+        startPollingCountdown();
+
+    } catch (e) {
+        alert("Error requesting open");
+        showClosedState();
+    }
+}
+
+function startPollingCountdown() {
+    if (POLL_ATTEMPTS <= 0) {
+        // Stop and ask to retry
+        showRetryUI();
+        return;
+    }
+
+    let timeLeft = 10;
+    const ui = document.getElementById('closed-state-ui');
+
+    // Initial Render
+    ui.innerHTML = `
+        <h3>Waiting for Staff...</h3>
+        <p>Checking status in <b style="color:#37ec13; font-size:1.5em">${timeLeft}</b></p>
+        <p style="font-size:12px; color:grey">Attempt ${4 - POLL_ATTEMPTS}/3</p>
+    `;
+
+    // Countdown Timer
+    COUNTDOWN_INTERVAL = setInterval(() => {
+        timeLeft--;
+        if (ui.innerHTML.includes("Checking status")) {
+            ui.querySelector('b').innerText = timeLeft;
+        }
+
+        if (timeLeft <= 0) {
+            clearInterval(COUNTDOWN_INTERVAL);
+            performOneCheck();
+        }
+    }, 1000);
+}
+
+async function performOneCheck() {
+    const ui = document.getElementById('closed-state-ui');
+    ui.innerHTML = `<h3>Checking...</h3>`;
+
+    try {
+        const t = Date.now();
+        const res = await fetch(`${R2_BASE_URL}/shops/${SHOP_ID}/tables/${TABLE_NO}/session.json?t=${t}`);
+        if (res.ok) {
+            const data = await res.json();
+            SESSION_ID = data.session_id;
+            stopPolling();
+            // Success! Reload full app
+            location.reload();
+        } else {
+            // Failed, decrement and loop
+            POLL_ATTEMPTS--;
+            startPollingCountdown();
+        }
+    } catch (e) {
+        POLL_ATTEMPTS--;
+        startPollingCountdown();
+    }
+}
+
+function showRetryUI() {
+    const ui = document.getElementById('closed-state-ui');
+    ui.innerHTML = `
+        <h3>Still Closed</h3>
+        <p>The staff hasn't opened the table yet.</p>
+        <button onclick="POLL_ATTEMPTS=3; requestOpen();" class="primary-btn" style="padding:15px; width:200px; margin-top:10px;">Request Again</button>
+        <br><br>
+        <button onclick="location.reload()" style="background:none; border:none; text-decoration:underline; color:#666">Refresh Page</button>
+    `;
+}
+
+function stopPolling() {
+    if (COUNTDOWN_INTERVAL) clearInterval(COUNTDOWN_INTERVAL);
 }
 
 // --- MENU DATA ---
@@ -247,6 +333,7 @@ window.confirmAddToCart = () => {
 };
 
 // --- CART & ORDER ---
+// --- CART & ORDER ---
 function updateCartBar() {
     const count = CART.reduce((sum, item) => sum + item.qty, 0);
     const total = CART.reduce((sum, item) => {
@@ -258,8 +345,17 @@ function updateCartBar() {
     document.getElementById('cart-count').innerText = `${count} items`;
 
     const btn = document.getElementById('btn-order');
-    btn.disabled = count === 0;
-    btn.innerText = count === 0 ? "View Order" : "Place Order";
+    // Logic: If items > 0, "Place Order". If 0, "View Bill".
+    if (count > 0) {
+        btn.innerText = "Place Order";
+        btn.onclick = placeOrder; // Bind directly
+        btn.style.background = "#37ec13";
+    } else {
+        btn.innerText = "View Bill";
+        btn.onclick = viewBill; // Bind New Function
+        btn.disabled = false; // Always enabled to check status
+        btn.style.background = "#2196F3"; // Blue for info
+    }
 }
 
 async function placeOrder() {
@@ -304,6 +400,9 @@ async function placeOrder() {
         });
 
         if (res.ok) {
+            // Save to Local History
+            saveOrderToHistory(payload.orderData);
+
             alert("✅ Order Sent Successfully!");
             CART = [];
             updateCartBar();
@@ -313,7 +412,83 @@ async function placeOrder() {
     } catch (e) {
         alert("Failed to send order. Please try again.");
     } finally {
-        btn.disabled = CART.length === 0;
-        btn.innerText = CART.length === 0 ? "View Order" : "Place Order";
+        updateCartBar();
     }
 }
+
+// --- BILL / HISTORY LOGIC ---
+function saveOrderToHistory(order) {
+    const key = `history_${SHOP_ID}_${TABLE_NO}`;
+    const history = JSON.parse(localStorage.getItem(key) || "[]");
+    history.push(order);
+    localStorage.setItem(key, JSON.stringify(history));
+}
+
+async function viewBill() {
+    // 1. Refresh Status (On Demand Request)
+    await checkSession();
+
+    // 2. Load History
+    const key = `history_${SHOP_ID}_${TABLE_NO}`;
+    const history = JSON.parse(localStorage.getItem(key) || "[]");
+
+    // 3. Render Modal
+    const modalContent = `
+        <div style="padding:20px;">
+            <h3>Your Orders</h3>
+            <p style="color:grey; font-size:12px;">Stored locally on this device</p>
+            <div style="max-height:300px; overflow-y:auto; margin:10px 0;">
+                ${history.length === 0 ? '<p>No orders yet.</p>' : history.map((h, i) => `
+                    <div style="border-bottom:1px solid #eee; padding:10px 0;">
+                        <div style="font-weight:bold; display:flex; justify-content:space-between;">
+                            <span>Round ${i + 1}</span>
+                            <span>${new Date(h.timestamp).toLocaleTimeString()}</span>
+                        </div>
+                        ${h.items.map(item => `
+                            <div style="display:flex; justify-content:space-between; font-size:14px; margin-top:4px;">
+                                <span>${item.qty}x ${item.name}</span>
+                                <span>$${item.totalItemPrice}</span>
+                            </div>
+                            ${item.options.length > 0 ? `<div style="font-size:12px; color:grey; margin-left:20px;">+ ${item.options.map(o => o.name).join(', ')}</div>` : ''}
+                        `).join('')}
+                         <div style="text-align:right; font-weight:bold; margin-top:5px;">Total: $${h.total}</div>
+                    </div>
+                `).join('')}
+            </div>
+            <div style="margin-top:20px; text-align:center;">
+                <button onclick="closeModal()" style="padding:10px 20px; background:#ddd; border:none; border-radius:8px;">Close</button>
+            </div>
+        </div>
+    `;
+
+    // Reuse item modal container for simplicity, or create a new one. 
+    // We'll hijack 'item-modal' content temporarily or rely on a generic modal structure if existed.
+    // For now, let's inject a simple overlay if not exists, or replace item-modal content.
+    // Simpler: Alert for now, OR replace innerHTML of 'item-modal' (but need to restore it later).
+
+    // Let's create a dedicated BILL MODAL in HTML via JS if not exists
+    let billModal = document.getElementById('bill-modal');
+    if (!billModal) {
+        billModal = document.createElement('div');
+        billModal.id = 'bill-modal';
+        billModal.className = 'modal'; // Reuse CSS class
+        billModal.innerHTML = `<div class="modal-content" id="bill-modal-content"></div>`;
+        document.body.appendChild(billModal);
+    }
+
+    document.getElementById('bill-modal-content').innerHTML = modalContent;
+    billModal.classList.add('active');
+
+    // Bind click outside to close
+    billModal.onclick = (e) => {
+        if (e.target === billModal) billModal.classList.remove('active');
+    };
+}
+
+// Helper to hijack close
+const originalClose = window.closeModal;
+window.closeModal = () => {
+    originalClose();
+    const billModal = document.getElementById('bill-modal');
+    if (billModal) billModal.classList.remove('active');
+};
