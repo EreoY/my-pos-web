@@ -350,6 +350,7 @@ function updateCartBar() {
         btn.innerText = "Place Order";
         btn.onclick = placeOrder; // Bind directly
         btn.style.background = "#37ec13";
+        btn.disabled = false; // Ensure enabled
     } else {
         btn.innerText = "View Bill";
         btn.onclick = viewBill; // Bind New Function
