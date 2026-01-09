@@ -1,350 +1,155 @@
 <!DOCTYPE html>
-<html lang="en">
+<html class="light" lang="en">
 
 <head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Menu</title>
-    <!-- Firebase SDKs (Compat) -->
-    <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-app-compat.js"></script>
-    <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-messaging-compat.js"></script>
+    <meta charset="utf-8" />
+    <meta content="width=device-width, initial-scale=1.0" name="viewport" />
+    <title>Food Ordering</title>
+
+    <!-- Fonts -->
+    <link
+        href="https://fonts.googleapis.com/css2?family=Work+Sans:wght@300;400;500;600;700&amp;family=Noto+Sans+Thai:wght@300;400;500;600;700&amp;display=swap"
+        rel="stylesheet" />
+    <link
+        href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap"
+        rel="stylesheet" />
+
+    <!-- Tailwind CSS -->
+    <script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
+    <script id="tailwind-config">
+        tailwind.config = {
+            darkMode: "class",
+            theme: {
+                extend: {
+                    colors: {
+                        "primary": "#37ec13",
+                        "background-light": "#f6f8f6",
+                        "background-dark": "#132210",
+                        "surface-light": "#ffffff",
+                        "surface-dark": "#1a2c15",
+                        "text-main": "#121811",
+                        "text-light": "#ffffff",
+                        "border-light": "#dde6db",
+                        "border-dark": "#2a3c25",
+                        "card-light": "#F7F7F7",
+                        "card-dark": "#27272a",
+                    },
+                    fontFamily: {
+                        "display": ["Work Sans", "Noto Sans Thai", "sans-serif"]
+                    },
+                    borderRadius: { "DEFAULT": "0.25rem", "lg": "0.5rem", "xl": "0.75rem", "2xl": "1rem", "full": "9999px" },
+                    boxShadow: {
+                        "soft": "0px 4px 20px rgba(0,0,0,0.03)",
+                        "nav": "0px -4px 20px rgba(0,0,0,0.05)"
+                    }
+                },
+            },
+        }
+    </script>
     <style>
-        :root {
-            /* Theme Colors */
-            --primary: #37ec13; /* Bright Green */
-            --bg-dark: #132210; /* Dark Green/Black */
-            --bg-card: #1E3320; /* Slightly lighter dark */
-            --text-light: #F7F9FC;
-            --text-dim: #A0B0A0;
-            --overlay: rgba(0, 0, 0, 0.8);
+        .hide-scrollbar::-webkit-scrollbar {
+            display: none;
+        }
+
+        .hide-scrollbar {
+            -ms-overflow-style: none;
+            scrollbar-width: none;
         }
 
         body {
-            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
-            background-color: var(--bg-dark);
-            color: var(--text-light);
-            margin: 0;
-            padding: 0;
-            padding-bottom: 120px; /* Space for Cart Bar */
-            -webkit-tap-highlight-color: transparent;
+            min-height: 100vh;
+            overflow-x: hidden;
         }
 
-        .container {
-            max-width: 600px;
-            margin: 0 auto;
+        /* Modal Transitions */
+        .modal-enter {
+            transform: translateY(100%);
+            opacity: 0;
         }
 
-        /* --- Sticky Header & Category Nav --- */
-        .header-sticky {
-            position: sticky;
-            top: 0;
-            background: var(--bg-dark);
-            z-index: 100;
-            padding-top: 10px;
-            padding-bottom: 5px;
-            box-shadow: 0 4px 10px rgba(0,0,0,0.3);
+        .modal-enter-active {
+            transform: translateY(0);
+            opacity: 1;
+            transition: all 0.3s cubic-bezier(0.16, 1, 0.3, 1);
         }
 
-        h1 {
-            text-align: center;
-            margin: 10px 0;
-            color: var(--primary);
-            font-size: 1.5rem;
+        .modal-exit {
+            transform: translateY(0);
+            opacity: 1;
         }
 
-        /* Category Scroll */
-        .category-nav {
-            display: flex;
-            overflow-x: auto;
-            white-space: nowrap;
-            padding: 10px 15px;
-            gap: 10px;
-            scrollbar-width: none; /* Hide scrollbar Firefox */
-        }
-        .category-nav::-webkit-scrollbar { display: none; } /* Hide Chrome/Safari */
-
-        .cat-pill {
-            background: rgba(255,255,255,0.1);
-            color: var(--text-dim);
-            padding: 8px 16px;
-            border-radius: 20px;
-            font-size: 0.9rem;
-            cursor: pointer;
-            transition: all 0.2s;
-            border: 1px solid transparent;
-        }
-        .cat-pill.active {
-            background: var(--primary);
-            color: #000;
-            font-weight: bold;
-            box-shadow: 0 0 10px rgba(55, 236, 19, 0.4);
-        }
-
-        /* --- Status Bar --- */
-        .status-bar {
-            text-align: center;
-            padding: 10px;
-            background: rgba(255,255,255,0.05);
-            margin: 15px;
-            border-radius: 8px;
-            font-size: 0.85em;
-            color: var(--text-dim);
-        }
-
-        /* --- Menu Grid --- */
-        .menu-section {
-            padding: 15px;
-        }
-        .section-title {
-            font-size: 1.1rem;
-            font-weight: bold;
-            margin-bottom: 10px;
-            color: var(--text-light);
-            border-left: 4px solid var(--primary);
-            padding-left: 10px;
-        }
-
-        .menu-grid {
-            display: grid;
-            grid-template-columns: repeat(2, 1fr); /* 2 Columns */
-            gap: 15px;
-        }
-
-        .product-card {
-            background: var(--bg-card);
-            border-radius: 16px;
-            overflow: hidden;
-            box-shadow: 0 4px 6px rgba(0, 0, 0, 0.2);
-            cursor: pointer;
-            transition: transform 0.1s;
-        }
-        .product-card:active {
-            transform: scale(0.98);
-        }
-
-        .card-img-wrap {
-            height: 120px;
-            background: #2a3d2c;
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            overflow: hidden;
-        }
-        .card-img-wrap img {
-            width: 100%;
-            height: 100%;
-            object-fit: cover;
-        }
-        .card-info {
-            padding: 12px;
-        }
-        .product-name {
-            font-weight: 600;
-            font-size: 0.95rem;
-            margin-bottom: 5px;
-            display: -webkit-box;
-            -webkit-line-clamp: 2;
-            -webkit-box-orient: vertical;
-            overflow: hidden;
-        }
-        .product-price {
-            color: var(--primary);
-            font-weight: bold;
-        }
-
-        /* --- Cart Bar --- */
-        .cart-bar {
-            position: fixed;
-            bottom: 0;
-            left: 0;
-            right: 0;
-            background: #252525;
-            padding: 15px 20px;
-            box-shadow: 0 -4px 15px rgba(0,0,0,0.5);
-            display: flex;
-            justify-content: space-between;
-            align-items: center;
-            z-index: 900;
-            border-top: 1px solid #333;
-        }
-        .cart-info { display: flex; flex-direction: column; }
-        .cart-total { font-size: 1.1rem; font-weight: bold; color: var(--primary); }
-        .cart-count { font-size: 0.8rem; color: #888; }
-        
-        .btn-order {
-            background: var(--primary);
-            color: #000;
-            border: none;
-            padding: 12px 30px;
-            border-radius: 30px;
-            font-weight: bold;
-            font-size: 1rem;
-            cursor: pointer;
-        }
-        .btn-order:disabled {
-            background: #444;
-            color: #888;
-            cursor: not-allowed;
-        }
-
-        /* --- Modal --- */
-        .modal-overlay {
-            position: fixed;
-            top: 0; left: 0; right: 0; bottom: 0;
-            background: var(--overlay);
-            z-index: 1000;
-            display: none; /* Hidden by default */
-            align-items: flex-end; /* Sheet style bottom */
-        }
-        .modal-overlay.active {
-            display: flex;
-            animation: fadeIn 0.2s;
-        }
-
-        .modal-sheet {
-            background: #1a1a1a;
-            width: 100%;
-            max-width: 600px;
-            margin: 0 auto;
-            border-radius: 20px 20px 0 0;
-            padding: 20px;
-            max-height: 85vh;
-            overflow-y: auto;
-            animation: slideUp 0.3s;
-            color: white;
-            box-shadow: 0 -5px 20px rgba(0,0,0,0.5);
-        }
-
-        @keyframes slideUp { from { transform: translateY(100%); } to { transform: translateY(0); } }
-        @keyframes fadeIn { from { opacity: 0; } to { opacity: 1; } }
-
-        .modal-header {
-            display: flex;
-            justify-content: space-between;
-            align-items: flex-start;
-            margin-bottom: 15px;
-            border-bottom: 1px solid #333;
-            padding-bottom: 10px;
-        }
-        .modal-title { font-size: 1.3rem; font-weight: bold; color: var(--primary); }
-        .modal-close { background: none; border: none; font-size: 1.5rem; color: #888; cursor: pointer; }
-
-        .option-group { margin-bottom: 20px; }
-        .option-title { font-size: 0.9rem; color: #aaa; margin-bottom: 8px; text-transform: uppercase; letter-spacing: 1px;}
-        
-        .option-row {
-            display: flex;
-            justify-content: space-between;
-            align-items: center;
-            background: #2a2a2a;
-            margin-bottom: 8px;
-            padding: 12px;
-            border-radius: 8px;
-            cursor: pointer;
-        }
-        /* Custom Checkbox */
-        .option-row input[type="checkbox"] {
-            width: 20px; height: 20px; accent-color: var(--primary); margin-right: 15px; cursor: pointer;
-        }
-        .option-label { flex-grow: 1; }
-        .option-price { color: var(--primary); font-weight: bold; }
-
-        .qty-control {
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            gap: 20px;
-            margin: 20px 0;
-            background: #222;
-            padding: 10px;
-            border-radius: 12px;
-        }
-        .btn-qty {
-            width: 40px; height: 40px;
-            border-radius: 50%;
-            border: none;
-            background: #444; color: white;
-            font-size: 1.2rem;
-            cursor: pointer;
-            display: flex; align-items: center; justify-content: center;
-        }
-        .qty-val { font-size: 1.5rem; font-weight: bold; width: 40px; text-align: center;}
-
-        .btn-add-cart {
-            width: 100%;
-            background: var(--primary);
-            color: #000;
-            border: none;
-            padding: 16px;
-            border-radius: 12px;
-            font-size: 1.1rem;
-            font-weight: bold;
-            cursor: pointer;
+        .modal-exit-active {
+            transform: translateY(100%);
+            opacity: 0;
+            transition: all 0.2s ease-in;
         }
     </style>
 </head>
 
-<body>
+<body
+    class="bg-background-light dark:bg-background-dark font-display antialiased text-[#121811] dark:text-gray-100 min-h-screen relative">
 
-    <div class="container">
-        
-        <!-- Sticky Header with Title & Nav -->
-        <div class="header-sticky">
-            <h1>🍴 Menu</h1>
-            <div id="category-nav" class="category-nav">
-                <!-- JS will inject filters here -->
-                <div class="cat-pill active">All</div>
-                <div class="cat-pill">Loading...</div>
-            </div>
-        </div>
-
-        <div id="status" class="status-bar">
-            Connecting...
-        </div>
-
-        <!-- Menu Container -->
-        <div id="menu-container">
-            <!-- JS will inject Sections & Grids here -->
-        </div>
-
-    </div>
-
-    <!-- Sticky Cart Bar -->
-    <div class="cart-bar">
-        <div class="cart-info">
-            <span id="cart-total" class="cart-total">$0.00</span>
-            <span id="cart-count" class="cart-count">0 items</span>
-        </div>
-        <button id="btn-order" class="btn-order" disabled>View Order</button>
-    </div>
-
-    <!-- Modal Overlay -->
-    <div id="item-modal" class="modal-overlay">
-        <div class="modal-sheet">
-            <div class="modal-header">
-                <div>
-                    <div id="modal-item-name" class="modal-title">Item Name</div>
-                    <div id="modal-base-price" style="color:#888;">$0.00</div>
+    <!-- Dynamic Main Content -->
+    <div id="app-view" class="w-full pb-24 min-h-screen">
+        <!-- Views (Menu, Cart, Bill) will be injected here -->
+        <div class="flex items-center justify-center h-screen">
+            <div class="animate-pulse flex flex-col items-center gap-4">
+                <div class="h-12 w-12 rounded-full bg-primary/20 flex items-center justify-center">
+                    <span class="material-symbols-outlined text-primary animate-spin">progress_activity</span>
                 </div>
-                <button class="modal-close" onclick="closeModal()">×</button>
+                <p class="text-sm font-medium text-gray-500">Loading...</p>
             </div>
-
-            <div id="modal-options">
-                <!-- Options injected here -->
-            </div>
-
-            <div class="qty-control">
-                <button class="btn-qty" onclick="changeQty(-1)">-</button>
-                <div id="modal-qty" class="qty-val">1</div>
-                <button class="btn-qty" onclick="changeQty(1)">+</button>
-            </div>
-
-            <button id="btn-add-modal" class="btn-add-cart" onclick="confirmAddToCart()">
-                Add to Cart - $0.00
-            </button>
         </div>
+    </div>
+
+    <!-- Persistent Bottom Navigation -->
+    <div id="bottom-nav"
+        class="fixed bottom-0 left-0 w-full bg-surface-light dark:bg-background-dark border-t border-gray-100 dark:border-gray-800 shadow-[0_-5px_10px_rgba(0,0,0,0.02)] z-40 pb-5 pt-3 px-6 hidden">
+        <div class="flex justify-around items-center max-w-md mx-auto">
+
+            <!-- Menu Tab -->
+            <button onclick="switchView('menu')" id="nav-menu"
+                class="flex flex-col items-center gap-1 w-16 group text-gray-400 dark:text-gray-500 transition-colors">
+                <div class="px-4 py-1 flex items-center justify-center rounded-full transition-colors"
+                    id="nav-icon-bg-menu">
+                    <span class="material-symbols-outlined text-[24px]"
+                        style="font-variation-settings: 'FILL' 1;">restaurant_menu</span>
+                </div>
+                <span class="text-xs font-medium">เมนู</span>
+            </button>
+
+            <!-- Cart Tab -->
+            <button onclick="switchView('cart')" id="nav-cart"
+                class="flex flex-col items-center gap-1 w-16 group text-gray-400 dark:text-gray-500 hover:text-gray-800 dark:hover:text-gray-200 transition-colors relative">
+                <div class="relative px-4 py-1 flex items-center justify-center rounded-full transition-colors"
+                    id="nav-icon-bg-cart">
+                    <span class="material-symbols-outlined text-[24px]">shopping_basket</span>
+                    <span id="nav-cart-badge"
+                        class="absolute -top-1 -right-1 flex h-4 w-4 items-center justify-center rounded-full bg-red-500 text-[10px] font-bold text-white border-2 border-white dark:border-[#121811] opacity-0">0</span>
+                </div>
+                <span class="text-xs font-medium">ตะกร้า</span>
+            </button>
+
+            <!-- Bill Tab -->
+            <button onclick="switchView('bill')" id="nav-bill"
+                class="flex flex-col items-center gap-1 w-16 group text-gray-400 dark:text-gray-500 hover:text-gray-800 dark:hover:text-gray-200 transition-colors">
+                <div class="px-4 py-1 flex items-center justify-center rounded-full transition-colors"
+                    id="nav-icon-bg-bill">
+                    <span class="material-symbols-outlined text-[24px]">receipt_long</span>
+                </div>
+                <span class="text-xs font-medium">บิล</span>
+            </button>
+
+        </div>
+    </div>
+
+    <!-- Full Screen Item Modal Overlay (Hidden by default) -->
+    <div id="item-modal-container"
+        class="fixed inset-0 z-50 bg-background-light dark:bg-background-dark flex flex-col hidden transform transition-transform duration-300 translate-y-full">
+        <!-- Content Injected via JS -->
     </div>
 
     <script src="script.js"></script>
 </body>
+
 </html>
