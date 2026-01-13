@@ -251,8 +251,24 @@ async function loadMenu() {
             else MENU = [{ id: 'default', name: 'General', items: data.items || [] }];
 
             switchView('menu'); // Initial View
+        } else {
+            throw new Error("Menu file not found");
         }
-    } catch (e) { console.error(e); }
+    } catch (e) {
+        console.error(e);
+        document.getElementById('app-view').innerHTML = `
+            <div class="flex flex-col items-center justify-center h-screen p-8 text-center">
+                 <span class="material-symbols-outlined text-6xl text-red-300 mb-4">broken_image</span>
+                <h2 class="text-xl font-bold text-gray-800 dark:text-white">ไม่สามารถโหลดเมนูได้</h2>
+                <p class="text-gray-500 mt-2">กรุณาลองใหม่อีกครั้ง</p>
+                <div class="mt-4">
+                    <button onclick="location.reload()" class="text-primary font-bold">รีเฟรช</button>
+                    <span class="text-gray-300 mx-2">|</span>
+                    <button onclick="loadMenu()" class="text-gray-500 underline">ลองโหลดใหม่</button>
+                </div>
+            </div>
+        `;
+    }
 }
 
 
@@ -260,7 +276,17 @@ async function loadMenu() {
 
 // 1. MENU PAGE
 function renderMenuPage() {
-    if (!MENU.length) return;
+    if (!MENU.length || (MENU.length === 1 && MENU[0].items.length === 0)) {
+        document.getElementById('app-view').innerHTML = `
+            <div class="flex flex-col items-center justify-center h-screen p-8 text-center">
+                 <span class="material-symbols-outlined text-6xl text-gray-300 mb-4">restaurant_menu</span>
+                <h2 class="text-xl font-bold text-gray-800 dark:text-white">ยังไม่มีรายการอาหาร</h2>
+                <p class="text-gray-500 mt-2">ทางร้านยังไม่ได้เพิ่มเมนู</p>
+            </div>
+        `;
+        return;
+    }
+
     if (!ACTIVE_CATEGORY) ACTIVE_CATEGORY = MENU[0].id;
 
     const html = `
