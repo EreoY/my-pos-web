@@ -1,4 +1,6 @@
 // [FILE: script.js]
+console.error("DEBUG: SCRIPT LOADED v3 (Force Check)");
+
 const R2_BASE_URL = "https://pub-95a66e290b0b4a03ad1abcef6de8b7da.r2.dev";
 const CLOUD_FUNCTION_URL = "https://sendorder-xtqo4x663a-uc.a.run.app";
 
@@ -21,9 +23,12 @@ let CURRENT_VIEW = 'menu';
 
 // --- INITIALIZATION ---
 window.onload = async () => {
+    console.error("DEBUG: window.onload started");
     const urlParams = new URLSearchParams(window.location.search);
     SHOP_ID = urlParams.get('shop_id');
     TABLE_NO = urlParams.get('table');
+
+    console.error(`DEBUG: Params -> Shop: ${SHOP_ID}, Table: ${TABLE_NO}`);
 
     if (!SHOP_ID || !TABLE_NO) {
         document.getElementById('app-view').innerHTML = `
@@ -47,7 +52,7 @@ window.onload = async () => {
 
 // --- ROUTING / VIEW SWITCHING ---
 window.switchView = (viewName) => {
-    console.log(`DEBUG: switchView called with: ${viewName}`);
+    console.error(`DEBUG: switchView called with: ${viewName}`);
     CURRENT_VIEW = viewName;
     updateNavUI();
 
