@@ -47,13 +47,17 @@ window.onload = async () => {
 
 // --- ROUTING / VIEW SWITCHING ---
 window.switchView = (viewName) => {
+    console.log(`DEBUG: switchView called with: ${viewName}`);
     CURRENT_VIEW = viewName;
     updateNavUI();
 
     // Render appropriate view
     if (viewName === 'menu') renderMenuPage();
     else if (viewName === 'cart') renderCartPage();
-    else if (viewName === 'bill') renderBillPage();
+    else if (viewName === 'bill') {
+        if (!SHOP_ID || !TABLE_NO) { console.error("DEBUG: Missing Shop/Table ID"); return; }
+        renderBillPage();
+    }
 
     window.scrollTo(0, 0);
 };
