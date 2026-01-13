@@ -709,7 +709,6 @@ async function placeOrder() {
         });
 
         if (res.ok) {
-            saveOrderToHistory(payload.orderData);
             CART = [];
             saveCartLoal();
             updateNavBadge();
@@ -725,70 +724,110 @@ async function placeOrder() {
 }
 
 
-// 4. BILL PAGE
-function renderBillPage() {
-    const key = `history_${SHOP_ID}_${TABLE_NO}`;
-    const history = JSON.parse(localStorage.getItem(key) || "[]").reverse(); // Newest first
-
-    const html = `
-        <div class="relative flex flex-col w-full h-full">
-            <header class="flex items-center bg-surface-light dark:bg-surface-dark p-4 shadow-sm z-20">
-                <h2 class="text-text-main dark:text-text-light text-lg font-bold leading-tight flex-1 text-center">บิลของฉัน</h2>
-            </header>
-            
-            <main class="flex-1 w-full px-4 pb-8 pt-4">
-                ${history.length === 0 ? `
-                    <div class="text-center py-20 opacity-50">
-                        <span class="material-symbols-outlined text-6xl mb-4">receipt_long</span>
-                        <p>ยังไม่มีประวัติการสั่ง</p>
-                    </div>
-                ` : `
-                    <div class="flex flex-col gap-4">
-                        ${history.map((order, idx) => `
-                            <div class="bg-surface-light dark:bg-surface-dark rounded-2xl border border-border-light dark:border-border-dark overflow-hidden shadow-sm">
-                                <div class="p-5">
-                                    <div class="flex justify-between items-start mb-4">
-                                        <div>
-                                            <h3 class="font-bold text-lg text-primary">การสั่งรอบที่ ${history.length - idx}</h3>
-                                            <div class="flex items-center gap-2 mt-1">
-                                                <span class="text-xs text-gray-400">${new Date(order.timestamp).toLocaleTimeString()}</span>
-                                            </div>
-                                        </div>
-                                    </div>
-                                    <div class="space-y-3 mb-4">
-                                        ${order.items.map(item => `
-                                            <div class="flex justify-between text-sm">
-                                                <div class="flex-1 pr-4">
-                                                    <div class="flex items-baseline justify-between">
-                                                        <span class="text-text-main dark:text-gray-200 font-medium">${item.name}</span>
-                                                        <span class="text-xs text-gray-400 ml-1 whitespace-nowrap">x ${item.qty}</span>
-                                                    </div>
-                                                    ${item.options && item.options.length > 0 ?
-            `<p class="text-[11px] text-gray-400 dark:text-gray-500 mt-0.5">• ${item.options.map(o => o.name).join(', ')}</p>`
-            : ''}
-                                                </div>
-                                                <span class="font-semibold text-text-main dark:text-gray-200">฿${item.totalItemPrice}</span>
-                                            </div>
-                                        `).join('')}
-                                    </div>
-                                    <div class="pt-4 border-t border-dashed border-border-light dark:border-border-dark flex justify-between items-center">
-                                        <span class="text-sm font-medium text-gray-500">รวมรอบนี้</span>
-                                        <span class="text-xl font-bold text-text-main dark:text-text-light">฿${order.total}</span>
-                                    </div>
-                                </div>
-                            </div>
-                        `).join('')}
-                    </div>
-                `}
-            </main>
+// 4. BILL PAGE (Shared from Cloud - via GET_BILL)
+async function renderBillPage() {
+    // Show Loading
+    document.getElementById('app-view').innerHTML = `
+        <div class="flex flex-col items-center justify-center h-screen">
+             <div class="animate-spin h-10 w-10 border-4 border-primary border-t-transparent rounded-full mb-4"></div>
+             <p class="text-gray-500">กำลังโหลดรายการบิล...</p>
         </div>
     `;
-    document.getElementById('app-view').innerHTML = html;
-}
 
-function saveOrderToHistory(order) {
-    const key = `history_${SHOP_ID}_${TABLE_NO}`;
-    const history = JSON.parse(localStorage.getItem(key) || "[]");
-    history.push(order);
-    localStorage.setItem(key, JSON.stringify(history));
+    try {
+        // Query via Cloud Function
+        const res = await fetch(CLOUD_FUNCTION_URL, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+                type: "GET_BILL",
+                shopId: SHOP_ID,
+                tableId: TABLE_NO
+            })
+        });
+
+        let history = [];
+        if (res.ok) {
+            history = await res.json();
+            // Sort Client-Side (Newest First)
+            history.sort((a, b) => b.timestamp - a.timestamp);
+        } else {
+            console.error("Fetch bill failed", await res.text());
+            throw new Error("Failed to load bill");
+        }
+
+        const html = `
+            <div class="relative flex flex-col w-full h-full">
+                <header class="flex items-center bg-surface-light dark:bg-surface-dark p-4 shadow-sm z-20">
+                    <h2 class="text-text-main dark:text-text-light text-lg font-bold leading-tight flex-1 text-center">บิลรวมโต๊ะนี้</h2>
+                    <button onclick="renderBillPage()" class="absolute right-4 text-primary">
+                        <span class="material-symbols-outlined">refresh</span>
+                    </button>
+                </header>
+                
+                <main class="flex-1 w-full px-4 pb-8 pt-4">
+                    ${history.length === 0 ? `
+                        <div class="text-center py-20 opacity-50">
+                            <span class="material-symbols-outlined text-6xl mb-4">receipt_long</span>
+                            <p>ยังไม่มีประวัติการสั่ง</p>
+                            <p class="text-xs mt-2 text-gray-400">สั่งรายการแรกเลย!</p>
+                        </div>
+                    ` : `
+                        <div class="flex flex-col gap-4">
+                            ${history.map((order, idx) => `
+                                <div class="bg-surface-light dark:bg-surface-dark rounded-2xl border border-border-light dark:border-border-dark overflow-hidden shadow-sm">
+                                    <div class="p-5">
+                                        <div class="flex justify-between items-start mb-4">
+                                            <div>
+                                                <h3 class="font-bold text-lg text-primary">การสั่งรอบที่ ${history.length - idx}</h3>
+                                                <div class="flex items-center gap-2 mt-1">
+                                                    <span class="text-xs text-gray-400">${new Date(order.timestamp).toLocaleTimeString()}</span>
+                                                </div>
+                                            </div>
+                                        </div>
+                                        <div class="space-y-3 mb-4">
+                                            ${order.items.map(item => `
+                                                <div class="flex justify-between text-sm">
+                                                    <div class="flex-1 pr-4">
+                                                        <div class="flex items-baseline justify-between">
+                                                            <span class="text-text-main dark:text-gray-200 font-medium">${item.name}</span>
+                                                            <span class="text-xs text-gray-400 ml-1 whitespace-nowrap">x ${item.qty}</span>
+                                                        </div>
+                                                        ${item.options && item.options.length > 0 ?
+                `<p class="text-[11px] text-gray-400 dark:text-gray-500 mt-0.5">• ${item.options.map(o => o.name).join(', ')}</p>`
+                : ''}
+                                                        ${item.note ? `<p class="text-[11px] text-red-400 mt-0.5 whitespace-pre-wrap">Note: ${item.note}</p>` : ''}
+                                                    </div>
+                                                    <span class="font-semibold text-text-main dark:text-gray-200">฿${item.totalItemPrice}</span>
+                                                </div>
+                                            `).join('')}
+                                        </div>
+                                        <div class="pt-4 border-t border-dashed border-border-light dark:border-border-dark flex justify-between items-center">
+                                            <span class="text-sm font-medium text-gray-500">รวมรอบนี้</span>
+                                            <span class="text-xl font-bold text-text-main dark:text-text-light">฿${order.total}</span>
+                                        </div>
+                                    </div>
+                                </div>
+                            `).join('')}
+                            
+                            <!-- Grand Total -->
+                            <div class="bg-primary/10 rounded-xl p-4 mt-2 border border-primary/20 flex justify-between items-center">
+                                <span class="font-bold text-primary">ยอดรวมทั้งหมด</span>
+                                <span class="font-bold text-2xl text-primary">฿${history.reduce((sum, o) => sum + o.total, 0)}</span>
+                            </div>
+                        </div>
+                    `}
+                </main>
+            </div>
+        `;
+        document.getElementById('app-view').innerHTML = html;
+    } catch (e) {
+        document.getElementById('app-view').innerHTML = `
+            <div class="flex flex-col items-center justify-center h-screen p-8 text-center">
+                 <span class="material-symbols-outlined text-6xl text-gray-300 mb-4">error</span>
+                <h2 class="text-xl font-bold text-gray-800 dark:text-white">ไม่สามารถโหลดบิลได้</h2>
+                <button onclick="renderBillPage()" class="mt-4 text-primary font-bold">ลองใหม่</button>
+            </div>
+        `;
+    }
 }
