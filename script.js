@@ -726,34 +726,46 @@ async function placeOrder() {
 
 // 4. BILL PAGE (Shared from Cloud - via GET_BILL)
 async function renderBillPage() {
+    console.log("DEBUG: --- renderBillPage Started ---");
+    console.log(`DEBUG: Target -> Shop: ${SHOP_ID}, Table: ${TABLE_NO}`);
+
     // Show Loading
     document.getElementById('app-view').innerHTML = `
         <div class="flex flex-col items-center justify-center h-screen">
              <div class="animate-spin h-10 w-10 border-4 border-primary border-t-transparent rounded-full mb-4"></div>
              <p class="text-gray-500">กำลังโหลดรายการบิล...</p>
+             <p class="text-xs text-gray-400 mt-2">Checking Cloud...</p>
         </div>
     `;
 
     try {
+        const payload = {
+            type: "GET_BILL",
+            shopId: SHOP_ID,
+            tableId: TABLE_NO
+        };
+        console.log("DEBUG: Fetch Payload:", JSON.stringify(payload));
+
         // Query via Cloud Function
         const res = await fetch(CLOUD_FUNCTION_URL, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({
-                type: "GET_BILL",
-                shopId: SHOP_ID,
-                tableId: TABLE_NO
-            })
+            body: JSON.stringify(payload)
         });
+
+        console.log(`DEBUG: Fetch Response Status: ${res.status}`);
 
         let history = [];
         if (res.ok) {
             history = await res.json();
+            console.log("DEBUG: Fetched History Data:", history);
+            console.log(`DEBUG: Found ${history.length} orders.`);
             // Sort Client-Side (Newest First)
             history.sort((a, b) => b.timestamp - a.timestamp);
         } else {
-            console.error("Fetch bill failed", await res.text());
-            throw new Error("Failed to load bill");
+            const errText = await res.text();
+            console.error("DEBUG: Fetch Failed Response:", errText);
+            throw new Error("Failed to load bill: " + errText);
         }
 
         const html = `
@@ -771,6 +783,7 @@ async function renderBillPage() {
                             <span class="material-symbols-outlined text-6xl mb-4">receipt_long</span>
                             <p>ยังไม่มีประวัติการสั่ง</p>
                             <p class="text-xs mt-2 text-gray-400">สั่งรายการแรกเลย!</p>
+                            <p class="text-[10px] text-gray-300 mt-4">Debug: S=${SHOP_ID}, T=${TABLE_NO}</p>
                         </div>
                     ` : `
                         <div class="flex flex-col gap-4">
@@ -822,10 +835,12 @@ async function renderBillPage() {
         `;
         document.getElementById('app-view').innerHTML = html;
     } catch (e) {
+        console.error("DEBUG: Unknown Error in renderBillPage:", e);
         document.getElementById('app-view').innerHTML = `
             <div class="flex flex-col items-center justify-center h-screen p-8 text-center">
                  <span class="material-symbols-outlined text-6xl text-gray-300 mb-4">error</span>
                 <h2 class="text-xl font-bold text-gray-800 dark:text-white">ไม่สามารถโหลดบิลได้</h2>
+                <p class="text-xs text-red-400 mt-2">${e.message}</p>
                 <button onclick="renderBillPage()" class="mt-4 text-primary font-bold">ลองใหม่</button>
             </div>
         `;
