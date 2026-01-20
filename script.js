@@ -1,6 +1,5 @@
-// [FILE: script.js]
 const R2_BASE_URL = "https://pub-95a66e290b0b4a03ad1abcef6de8b7da.r2.dev";
-const CLOUD_FUNCTION_URL = "https://sendorder-xtqo4x663a-uc.a.run.app";
+const CLOUD_FUNCTION_URL = "https://pos-api-worker.jitkhon1979.workers.dev";
 
 // --- STATE ---
 let SHOP_ID = null;
