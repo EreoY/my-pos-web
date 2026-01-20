@@ -682,15 +682,20 @@ async function placeOrder() {
         return sum + (itemTotal * item.qty);
     }, 0);
 
+    // Generate Request UUID (Deduplication Key)
+    const orderId = `ord_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
+
     const payload = {
-        type: "ORDER",
+        type: "PLACE_ORDER", // Updated Type
         shopId: SHOP_ID,
         sessionId: SESSION_ID,
+        orderId: orderId,    // Unique ID
         orderData: {
             shopId: SHOP_ID,
             table: TABLE_NO,
             total: totalVal,
             timestamp: Date.now(),
+            orderId: orderId, // Also inside data for reference
             items: CART.map(c => ({
                 id: c.id,
                 name: c.name,
@@ -703,29 +708,85 @@ async function placeOrder() {
         }
     };
 
-    try {
-        const btn = document.querySelector('button[onclick="placeOrder()"]');
-        if (btn) { btn.innerText = "กำลังส่ง..."; btn.disabled = true; }
+    const btn = document.querySelector('button[onclick="placeOrder()"]');
+    if (btn) { btn.innerText = "กำลังส่ง..."; btn.disabled = true; }
 
+    // Retry Loop Configuration (Aggressive Strategy)
+    const PHASE1_RETRIES = 15;
+    const PHASE1_DELAY = 5000; // 5 seconds
+
+    const PHASE2_DELAY_BEFORE_START = 60000; // 1 minute ("นานๆ")
+    const PHASE2_RETRIES = 5;
+    const PHASE2_DELAY = 5000;
+
+    // Helper to attempt sending
+    const trySend = async (orderPayload) => {
         const res = await fetch(CLOUD_FUNCTION_URL, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify(payload)
+            body: JSON.stringify(orderPayload)
         });
+        if (!res.ok) throw new Error(`Status ${res.status}`);
+        return true;
+    };
 
-        if (res.ok) {
-            CART = [];
-            saveCartLoal();
-            updateNavBadge();
-            alert("สั่งอาหารเรียบร้อย!");
-            switchView('menu');
-        } else {
-            throw new Error("Failed");
+    // --- PHASE 1 ---
+    for (let attempt = 1; attempt <= PHASE1_RETRIES; attempt++) {
+        try {
+            console.log(`Sending Order (Phase 1: ${attempt}/${PHASE1_RETRIES})...`);
+            if (btn) btn.innerText = `กำลังส่ง (${attempt}/${PHASE1_RETRIES})...`;
+
+            await trySend(payload);
+
+            // Success
+            handleOrderSuccess();
+            return;
+        } catch (e) {
+            console.error(`Phase 1 Attempt ${attempt} failed:`, e);
+            if (attempt < PHASE1_RETRIES) await new Promise(r => setTimeout(r, PHASE1_DELAY));
         }
-    } catch (e) {
-        alert("Failed to send order.");
-        renderCartPage(); // Reset button
     }
+
+    // --- PAUSE ("ไม่ได้ส่งอะไรนานๆ") ---
+    console.log("Phase 1 failed. Waiting for Phase 2...");
+    if (btn) btn.innerText = "ระบบกำลังพยายามเชื่อมต่อ...";
+    await new Promise(r => setTimeout(r, PHASE2_DELAY_BEFORE_START));
+
+    // --- PHASE 2 (Resend Everything "Recheck") ---
+    for (let attempt = 1; attempt <= PHASE2_RETRIES; attempt++) {
+        try {
+            console.log(`Sending Order (Phase 2: ${attempt}/${PHASE2_RETRIES})...`);
+            if (btn) btn.innerText = `รีเช็คข้อมูล (${attempt}/${PHASE2_RETRIES})...`;
+
+            // Note: In a real complex app, we might want to re-snapshot the cart here 
+            // if the user desires "everything on the web at that moment".
+            // But usually, updating the payload mid-flight is risky (duplicates/partial). 
+            // We stick to the ORIGINAL payload to ensure idempotency with the specific orderId.
+            // If the user meant "Retry pending carts", that's state restoration. 
+            // Assuming "Retry THIS order" for now.
+
+            await trySend(payload);
+
+            // Success
+            handleOrderSuccess();
+            return;
+        } catch (e) {
+            console.error(`Phase 2 Attempt ${attempt} failed:`, e);
+            if (attempt < PHASE2_RETRIES) await new Promise(r => setTimeout(r, PHASE2_DELAY));
+        }
+    }
+
+    // Final Failure
+    alert("ไม่สามารถส่งออเดอร์ได้ กรุณาแคปหน้าจอแล้วแจ้งพนักงาน");
+    if (btn) { btn.innerText = "ลองใหม่อีกครั้ง"; btn.disabled = false; }
+}
+
+function handleOrderSuccess() {
+    CART = [];
+    saveCartLoal();
+    updateNavBadge();
+    alert("สั่งอาหารเรียบร้อย!");
+    switchView('menu');
 }
 
 
