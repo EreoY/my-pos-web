@@ -800,30 +800,115 @@ async function renderBillPage() {
     `;
 
     try {
-        const payload = {
-            type: "GET_BILL",
-            shopId: SHOP_ID,
-            tableId: TABLE_NO
-        };
+        const res = await fetch(`${CLOUD_FUNCTION_URL}/orders?shop_id=${SHOP_ID}&table_id=${TABLE_NO}`);
+        if (!res.ok) throw new Error("Failed to load bill");
 
-        // Query via Cloud Function
-        const res = await fetch(CLOUD_FUNCTION_URL, {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify(payload)
-        });
+        const data = await res.json();
+        const orders = data.orders || [];
 
-        let history = [];
-        if (res.ok) {
-            history = await res.json();
-            // Sort Client-Side (Newest First)
-            history.sort((a, b) => b.timestamp - a.timestamp);
-        } else {
-            console.error("Fetch bill failed", await res.text());
-            throw new Error("Failed to load bill");
+        if (orders.length === 0) {
+            document.getElementById('app-view').innerHTML = `
+                <div class="flex flex-col items-center justify-center h-screen p-8 text-center">
+                    <span class="material-symbols-outlined text-6xl text-gray-300 mb-4">receipt_long</span>
+                    <h2 class="text-xl font-bold text-gray-800 dark:text-white">ยังไม่มีรายการสั่งซื้อ</h2>
+                </div>`;
+            return;
         }
 
-        const html = `
+        // Calculate Grand Total
+        let grandTotal = 0;
+        const orderHtml = orders.map(order => {
+            // Parse order_data from JSON string
+            let od = {};
+            try { od = JSON.parse(order.order_data); } catch (e) { console.error("Parse Error", e); }
+
+            const total = parseFloat(od.total || 0);
+            if (order.status !== 'PAID' && order.status !== 'CANCELLED') {
+                grandTotal += total;
+            }
+
+            // Status Badge Color
+            let statusColor = "bg-yellow-100 text-yellow-800";
+            if (order.status === 'PAID') statusColor = "bg-green-100 text-green-800";
+            if (order.status === 'CANCELLED') statusColor = "bg-red-100 text-red-800";
+
+            return `
+                <div class="bg-white dark:bg-card-dark rounded-xl p-4 shadow-sm border border-gray-100 dark:border-gray-800">
+                    <div class="flex justify-between items-start mb-2">
+                        <div>
+                            <span class="text-xs text-gray-400">#${order.order_id.substring(0, 8)}</span>
+                            <div class="text-xs text-gray-400">${new Date(order.created_at).toLocaleTimeString()}</div>
+                        </div>
+                        <span class="${statusColor} px-2 py-0.5 rounded text-xs font-bold">${order.status}</span>
+                    </div>
+                    <div class="space-y-1">
+                        ${(od.items || []).map(item => `
+                            <div class="flex justify-between text-sm">
+                                <span class="text-gray-800 dark:text-white">${item.qty}x ${item.name}</span>
+                                <span class="text-gray-600 dark:text-gray-300">฿${item.totalItemPrice}</span>
+                            </div>
+                        `).join('')}
+                    </div>
+                    <div class="mt-3 pt-2 border-t border-gray-100 dark:border-gray-700 flex justify-between font-bold text-gray-900 dark:text-white">
+                        <span>รวม</span>
+                        <span>฿${total}</span>
+                    </div>
+                </div>
+             `;
+        }).join('');
+
+        document.getElementById('app-view').innerHTML = `
+            <div class="flex flex-col h-full bg-gray-50 dark:bg-background-dark">
+                 <header class="bg-white dark:bg-card-dark p-4 shadow-sm sticky top-0 z-10">
+                    <h1 class="text-xl font-bold text-center dark:text-white">รายการที่สั่ง</h1>
+                    <p class="text-center text-sm text-gray-500">โต๊ะ ${TABLE_NO}</p>
+                 </header>
+                 <main class="flex-1 overflow-y-auto p-4 space-y-4">
+                    ${orderHtml}
+                 </main>
+                 <footer class="bg-white dark:bg-card-dark p-4 border-t border-gray-100 dark:border-gray-800 sticky bottom-0 z-10">
+                    <div class="flex justify-between items-center mb-4">
+                         <span class="text-gray-600 dark:text-gray-300">ยอดรวมทั้งหมด</span>
+                         <span class="text-2xl font-bold text-primary">฿${grandTotal}</span>
+                    </div>
+                    <button class="w-full bg-black dark:bg-white text-white dark:text-black font-bold py-3 rounded-xl">
+                        เรียกเช็คบิล (Call Bill)
+                    </button>
+                 </footer>
+            </div>
+        `;
+
+    } catch (e) {
+        console.error(e);
+        document.getElementById('app-view').innerHTML = `<div class="p-8 text-center text-red-500">Error loading bill</div>`;
+    }
+}
+
+try {
+    const payload = {
+        type: "GET_BILL",
+        shopId: SHOP_ID,
+        tableId: TABLE_NO
+    };
+
+    // Query via Cloud Function
+    const res = await fetch(CLOUD_FUNCTION_URL, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload)
+    });
+
+    let history = [];
+    if (res.ok) {
+        history = await res.json();
+        // Sort Client-Side (Newest First)
+        history.sort((a, b) => b.timestamp - a.timestamp);
+    } else {
+        console.error("Fetch bill failed", await res.text());
+        throw new Error("Failed to load bill");
+    }
+
+    const html = `
             <div class="relative flex flex-col w-full h-full">
                 <header class="flex items-center bg-surface-light dark:bg-surface-dark p-4 shadow-sm z-20">
                     <h2 class="text-text-main dark:text-text-light text-lg font-bold leading-tight flex-1 text-center">บิลรวมโต๊ะนี้</h2>
@@ -861,8 +946,8 @@ async function renderBillPage() {
                                                             <span class="text-xs text-gray-400 ml-1 whitespace-nowrap">x ${item.qty}</span>
                                                         </div>
                                                         ${item.options && item.options.length > 0 ?
-                `<p class="text-[11px] text-gray-400 dark:text-gray-500 mt-0.5">• ${item.options.map(o => o.name).join(', ')}</p>`
-                : ''}
+            `<p class="text-[11px] text-gray-400 dark:text-gray-500 mt-0.5">• ${item.options.map(o => o.name).join(', ')}</p>`
+            : ''}
                                                         ${item.note ? `<p class="text-[11px] text-red-400 mt-0.5 whitespace-pre-wrap">Note: ${item.note}</p>` : ''}
                                                     </div>
                                                     <span class="font-semibold text-text-main dark:text-gray-200">฿${item.totalItemPrice}</span>
@@ -887,14 +972,14 @@ async function renderBillPage() {
                 </main>
             </div>
         `;
-        document.getElementById('app-view').innerHTML = html;
-    } catch (e) {
-        document.getElementById('app-view').innerHTML = `
+    document.getElementById('app-view').innerHTML = html;
+} catch (e) {
+    document.getElementById('app-view').innerHTML = `
             <div class="flex flex-col items-center justify-center h-screen p-8 text-center">
                  <span class="material-symbols-outlined text-6xl text-gray-300 mb-4">error</span>
                 <h2 class="text-xl font-bold text-gray-800 dark:text-white">ไม่สามารถโหลดบิลได้</h2>
                 <button onclick="renderBillPage()" class="mt-4 text-primary font-bold">ลองใหม่</button>
             </div>
         `;
-    }
+}
 }
