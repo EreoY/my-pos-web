@@ -823,49 +823,57 @@ function updateModalToSuccess() {
 }
 
 function waitForShopConfirmation(orderId) {
-    console.log("🔄 Starting Polling for:", orderId);
+    console.log("👂 Listening for confirmation via SSE:", orderId);
 
-    let attempts = 0;
-    const maxAttempts = 15; // 30 seconds (15 * 2s)
-
-    const pollInterval = setInterval(async () => {
-        attempts++;
-        console.log(`Polling status... (${attempts})`);
-
-        try {
-            // Explicitly set Cache-Control to avoid caching the GET request
-            const res = await fetch(`${CLOUD_FUNCTION_URL}/order-status?orderId=${orderId}&ts=${Date.now()}`);
-            if (res.ok) {
-                const data = await res.json();
-                if (data.status === 'RECEIVED') {
-                    console.log("✅ Status is RECEIVED!");
-                    clearInterval(pollInterval);
-
-                    // Trigger UI Update
-                    updateModalToSuccess();
-
-                    // Wait 2 seconds then navigate
-                    setTimeout(() => {
-                        hideWaitingModal();
-                        handleOrderSuccess();
-                    }, 2000);
-                    return;
-                }
-            }
-        } catch (e) {
-            console.error("Polling Error:", e);
-        }
-
-        // Timeout Check
-        if (attempts >= maxAttempts) {
-            clearInterval(pollInterval);
+    // Safety Net: Client-side Timeout 35s (longer than server to allow server message first)
+    // This prevents "hanging" if the server connection dies silently without error.
+    const timeout = setTimeout(() => {
+        if (evtSource) {
+            evtSource.close();
             hideWaitingModal();
-            alert("หมดเวลา: ร้านค้ายุ่งหรือยังไม่ตอบรับ กรุณาแจ้งพนักงาน");
+            alert("หมดเวลา: ร้านค้ายุ่งหรือยังไม่ตอบรับเวลานานเกินไป กรุณาแจ้งพนักงาน");
             const btn = document.querySelector('button[onclick="placeOrder()"]');
             if (btn) { btn.innerText = "ลองใหม่อีกครั้ง"; btn.disabled = false; }
         }
+    }, 35000);
 
-    }, 2000); // Check every 2 seconds
+    const evtSource = new EventSource(`${CLOUD_FUNCTION_URL}/events/order?orderId=${orderId}`);
+
+    evtSource.onmessage = (event) => {
+        try {
+            // Keep-Alive or Heartbeat logic could be here if needed
+            const data = JSON.parse(event.data);
+
+            if (data.status === 'RECEIVED') {
+                console.log("✅ SSE Confirmation Received!");
+                clearTimeout(timeout);
+                evtSource.close();
+
+                updateModalToSuccess();
+
+                setTimeout(() => {
+                    hideWaitingModal();
+                    handleOrderSuccess();
+                }, 2000);
+            } else if (data.error === 'TIMEOUT') {
+                console.warn("⚠️ Server Timeout Message Received");
+                clearTimeout(timeout); // Clear client timeout, handle server timeout
+                evtSource.close();
+                hideWaitingModal();
+                alert("หมดเวลา: ร้านค้ายุ่งหรือยังไม่ตอบรับ กรุณาแจ้งพนักงาน");
+                const btn = document.querySelector('button[onclick="placeOrder()"]');
+                if (btn) { btn.innerText = "ลองใหม่อีกครั้ง"; btn.disabled = false; }
+            }
+        } catch (e) {
+            console.error("SSE Parse Error:", e);
+        }
+    };
+
+    evtSource.onerror = (err) => {
+        console.error("SSE Error:", err);
+        // If error occurs (e.g. initial connection fail), we might want to retry or fail fast.
+        // For now, let's allow browser's native retry, but the client timeout will kill it if it takes too long.
+    };
 }
 
 
