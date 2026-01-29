@@ -792,8 +792,10 @@ function showWaitingModal() {
     modal.innerHTML = `
         <div class="bg-white dark:bg-card-dark p-8 rounded-2xl shadow-2xl flex flex-col items-center text-center max-w-xs mx-4">
             <div class="animate-spin h-16 w-16 border-4 border-primary border-t-transparent rounded-full mb-6"></div>
-            <h3 class="text-xl font-bold mb-2 dark:text-white">กำลังส่งออเดอร์...</h3>
-            <p class="text-gray-500 dark:text-gray-400">กรุณารอสักครู่ ทางร้านกำลังยืนยันรายการของท่าน</p>
+        <div id="modal-content" class="bg-white dark:bg-card-dark p-8 rounded-2xl shadow-2xl flex flex-col items-center text-center max-w-xs mx-4 transform transition-all">
+            <div id="modal-icon" class="animate-spin h-16 w-16 border-4 border-primary border-t-transparent rounded-full mb-6 relative"></div>
+            <h3 id="modal-title" class="text-xl font-bold mb-2 dark:text-white">กำลังส่งออเดอร์...</h3>
+            <p id="modal-desc" class="text-gray-500 dark:text-gray-400">กรุณารอสักครู่ ทางร้านกำลังยืนยันรายการของท่าน</p>
         </div>
     `;
     document.body.appendChild(modal);
@@ -801,62 +803,69 @@ function showWaitingModal() {
 
 function hideWaitingModal() {
     const modal = document.getElementById('waiting-modal');
-    if (modal) modal.remove();
+    if (modal) {
+        modal.parentElement.removeChild(modal);
+    }
+}
+
+function updateModalToSuccess() {
+    const content = document.getElementById('modal-content');
+    if (!content) return; // Should not happen
+
+    // Update Content
+    content.innerHTML = `
+        <div class="h-16 w-16 mb-6 rounded-full bg-green-100 flex items-center justify-center animate-bounce">
+             <span class="material-symbols-outlined text-4xl text-green-600">check_circle</span>
+        </div>
+        <h3 class="text-xl font-bold mb-2 dark:text-white">สำเร็จ!</h3>
+        <p class="text-gray-500 dark:text-gray-400">ร้านค้าได้รับออเดอร์แล้ว</p>
+    `;
 }
 
 function waitForShopConfirmation(orderId) {
-    console.log("👂 Listening for confirmation:", orderId);
+    console.log("🔄 Starting Polling for:", orderId);
 
-    // Safety Net: Timeout 30s
-    const timeout = setTimeout(() => {
-        if (evtSource) {
-            evtSource.close();
+    let attempts = 0;
+    const maxAttempts = 15; // 30 seconds (15 * 2s)
+
+    const pollInterval = setInterval(async () => {
+        attempts++;
+        console.log(`Polling status... (${attempts})`);
+
+        try {
+            // Explicitly set Cache-Control to avoid caching the GET request
+            const res = await fetch(`${CLOUD_FUNCTION_URL}/order-status?orderId=${orderId}&ts=${Date.now()}`);
+            if (res.ok) {
+                const data = await res.json();
+                if (data.status === 'RECEIVED') {
+                    console.log("✅ Status is RECEIVED!");
+                    clearInterval(pollInterval);
+
+                    // Trigger UI Update
+                    updateModalToSuccess();
+
+                    // Wait 2 seconds then navigate
+                    setTimeout(() => {
+                        hideWaitingModal();
+                        handleOrderSuccess();
+                    }, 2000);
+                    return;
+                }
+            }
+        } catch (e) {
+            console.error("Polling Error:", e);
+        }
+
+        // Timeout Check
+        if (attempts >= maxAttempts) {
+            clearInterval(pollInterval);
             hideWaitingModal();
-            alert("ร้านค้ายังไม่ตอบรับเวลานานเกินไป กรุณาแจ้งพนักงานเพื่อเช็คออเดอร์");
-            // We do NOT clear the cart, so user can try again or show staff
+            alert("หมดเวลา: ร้านค้ายุ่งหรือยังไม่ตอบรับ กรุณาแจ้งพนักงาน");
             const btn = document.querySelector('button[onclick="placeOrder()"]');
             if (btn) { btn.innerText = "ลองใหม่อีกครั้ง"; btn.disabled = false; }
         }
-    }, 30000);
 
-    const evtSource = new EventSource(`${CLOUD_FUNCTION_URL}/events/order?orderId=${orderId}`);
-
-    evtSource.onmessage = (event) => {
-        try {
-            const data = JSON.parse(event.data);
-            if (data.status === 'RECEIVED') {
-                console.log("✅ Confirmation Received!");
-                clearTimeout(timeout);
-                evtSource.close();
-
-                // Update Modal to Success State
-                const modalParams = document.querySelector('#waiting-modal > div');
-                if (modalParams) {
-                    modalParams.innerHTML = `
-                        <div class="h-16 w-16 mb-6 rounded-full bg-green-100 flex items-center justify-center">
-                            <span class="material-symbols-outlined text-4xl text-green-600">check_circle</span>
-                        </div>
-                        <h3 class="text-xl font-bold mb-2 dark:text-white">สั่งอาหารสำเร็จ!</h3>
-                        <p class="text-gray-500 dark:text-gray-400">ร้านค้าได้รับออเดอร์ของท่านแล้ว</p>
-                    `;
-                }
-
-                // Wait 2 seconds then continue
-                setTimeout(() => {
-                    hideWaitingModal();
-                    handleOrderSuccess();
-                }, 2000);
-            }
-        } catch (e) {
-            console.error("SSE Parse Error:", e);
-        }
-    };
-
-    evtSource.onerror = (err) => {
-        console.error("SSE Error:", err);
-        // Don't close immediately on transient errors, let browser retry.
-        // But if it fails too long, the timeout above will kill it.
-    };
+    }, 2000); // Check every 2 seconds
 }
 
 
