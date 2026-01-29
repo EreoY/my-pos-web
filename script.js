@@ -783,15 +783,16 @@ function handleOrderSuccess() {
     switchView('menu');
 }
 
-// --- SSE & WAITING UI ---
+// --- POLLING & WAITING UI (Robust Strategy) ---
 
 function showWaitingModal() {
+    // 1. Aggressive Cleanup: Remove ANY existing modals
+    document.querySelectorAll('#waiting-modal').forEach(el => el.remove());
+
     const modal = document.createElement('div');
     modal.id = 'waiting-modal';
     modal.className = 'fixed inset-0 z-50 flex items-center justify-center bg-black bg-opacity-80 backdrop-blur-sm';
     modal.innerHTML = `
-        <div class="bg-white dark:bg-card-dark p-8 rounded-2xl shadow-2xl flex flex-col items-center text-center max-w-xs mx-4">
-            <div class="animate-spin h-16 w-16 border-4 border-primary border-t-transparent rounded-full mb-6"></div>
         <div id="modal-content" class="bg-white dark:bg-card-dark p-8 rounded-2xl shadow-2xl flex flex-col items-center text-center max-w-xs mx-4 transform transition-all">
             <div id="modal-icon" class="animate-spin h-16 w-16 border-4 border-primary border-t-transparent rounded-full mb-6 relative"></div>
             <h3 id="modal-title" class="text-xl font-bold mb-2 dark:text-white">กำลังส่งออเดอร์...</h3>
@@ -802,31 +803,30 @@ function showWaitingModal() {
 }
 
 function hideWaitingModal() {
-    const modal = document.getElementById('waiting-modal');
-    if (modal) {
-        modal.parentElement.removeChild(modal);
-    }
+    document.querySelectorAll('#waiting-modal').forEach(el => el.remove());
 }
 
 function updateModalToSuccess() {
     const content = document.getElementById('modal-content');
-    if (!content) return; // Should not happen
+    if (!content) return;
 
-    // Update Content
+    // Update Content with BUTTON
     content.innerHTML = `
         <div class="h-16 w-16 mb-6 rounded-full bg-green-100 flex items-center justify-center animate-bounce">
              <span class="material-symbols-outlined text-4xl text-green-600">check_circle</span>
         </div>
         <h3 class="text-xl font-bold mb-2 dark:text-white">สำเร็จ!</h3>
-        <p class="text-gray-500 dark:text-gray-400">ร้านค้าได้รับออเดอร์แล้ว</p>
+        <p class="text-gray-500 dark:text-gray-400 mb-6">ร้านค้าได้รับออเดอร์แล้ว</p>
+        <button onclick="hideWaitingModal(); handleOrderSuccess()" class="w-full bg-primary text-white font-bold py-3 rounded-xl shadow-lg hover:bg-green-600 transition-colors">
+            ตกลง
+        </button>
     `;
 }
 
 function waitForShopConfirmation(orderId) {
     console.log("👂 Listening for confirmation via SSE:", orderId);
 
-    // Safety Net: Client-side Timeout 35s (longer than server to allow server message first)
-    // This prevents "hanging" if the server connection dies silently without error.
+    // Safety Net: Client-side Timeout 35s
     const timeout = setTimeout(() => {
         if (evtSource) {
             evtSource.close();
@@ -841,7 +841,6 @@ function waitForShopConfirmation(orderId) {
 
     evtSource.onmessage = (event) => {
         try {
-            // Keep-Alive or Heartbeat logic could be here if needed
             const data = JSON.parse(event.data);
 
             if (data.status === 'RECEIVED') {
@@ -849,15 +848,12 @@ function waitForShopConfirmation(orderId) {
                 clearTimeout(timeout);
                 evtSource.close();
 
+                // Trigger UI Update (Button will handle close)
                 updateModalToSuccess();
-
-                setTimeout(() => {
-                    hideWaitingModal();
-                    handleOrderSuccess();
-                }, 2000);
+                // NO auto-close setTimeout here!
             } else if (data.error === 'TIMEOUT') {
                 console.warn("⚠️ Server Timeout Message Received");
-                clearTimeout(timeout); // Clear client timeout, handle server timeout
+                clearTimeout(timeout);
                 evtSource.close();
                 hideWaitingModal();
                 alert("หมดเวลา: ร้านค้ายุ่งหรือยังไม่ตอบรับ กรุณาแจ้งพนักงาน");
@@ -871,8 +867,6 @@ function waitForShopConfirmation(orderId) {
 
     evtSource.onerror = (err) => {
         console.error("SSE Error:", err);
-        // If error occurs (e.g. initial connection fail), we might want to retry or fail fast.
-        // For now, let's allow browser's native retry, but the client timeout will kill it if it takes too long.
     };
 }
 
