@@ -42,6 +42,7 @@ window.onload = async () => {
     } catch (e) { }
 
     await checkSession();
+    await checkActiveOrder();
 };
 
 // --- ROUTING / VIEW SWITCHING ---
@@ -107,6 +108,32 @@ function updateNavBadge() {
     }
 }
 
+
+// --- RECOVERY LOGIC ---
+async function checkActiveOrder() {
+    const activeOrderId = localStorage.getItem('current_order_id');
+    if (activeOrderId) {
+        console.log("🔄 Restoring active order:", activeOrderId);
+        showWaitingModal();
+        // Optional: Check if already received (Optimization)
+        try {
+            const res = await fetch(`${CLOUD_FUNCTION_URL}/order-status?orderId=${activeOrderId}`);
+            if (res.ok) {
+                const data = await res.json();
+                if (data.status === 'RECEIVED') {
+                    updateModalSuccess();
+                    setTimeout(() => {
+                        hideWaitingModal();
+                        handleOrderSuccess();
+                    }, 1000);
+                    return;
+                }
+            }
+        } catch (e) { console.error("Recovery check failed:", e); }
+
+        waitForShopConfirmation(activeOrderId);
+    }
+}
 
 // --- SESSION LOGIC ---
 async function checkSession() {
@@ -707,6 +734,9 @@ async function placeOrder() {
         }
     };
 
+    // PERSIST STATE
+    localStorage.setItem('current_order_id', orderId);
+
     const btn = document.querySelector('button[onclick="placeOrder()"]');
     if (btn) { btn.innerText = "กำลังส่ง..."; btn.disabled = true; }
 
@@ -781,6 +811,7 @@ async function placeOrder() {
 }
 
 function handleOrderSuccess() {
+    localStorage.removeItem('current_order_id');
     CART = [];
     saveCartLoal();
     updateNavBadge();
