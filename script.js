@@ -737,8 +737,9 @@ async function placeOrder() {
 
             await trySend(payload);
 
-            // Success
-            handleOrderSuccess();
+            // CHANGED: Instead of instant success, we now wait for Shop Confirmation
+            showWaitingModal();
+            waitForShopConfirmation(orderId);
             return;
         } catch (e) {
             console.error(`Phase 1 Attempt ${attempt} failed:`, e);
@@ -757,17 +758,11 @@ async function placeOrder() {
             console.log(`Sending Order (Phase 2: ${attempt}/${PHASE2_RETRIES})...`);
             if (btn) btn.innerText = `รีเช็คข้อมูล (${attempt}/${PHASE2_RETRIES})...`;
 
-            // Note: In a real complex app, we might want to re-snapshot the cart here 
-            // if the user desires "everything on the web at that moment".
-            // But usually, updating the payload mid-flight is risky (duplicates/partial). 
-            // We stick to the ORIGINAL payload to ensure idempotency with the specific orderId.
-            // If the user meant "Retry pending carts", that's state restoration. 
-            // Assuming "Retry THIS order" for now.
-
             await trySend(payload);
 
-            // Success
-            handleOrderSuccess();
+            // CHANGED: Wait for confirmation here too
+            showWaitingModal();
+            waitForShopConfirmation(orderId);
             return;
         } catch (e) {
             console.error(`Phase 2 Attempt ${attempt} failed:`, e);
@@ -784,8 +779,71 @@ function handleOrderSuccess() {
     CART = [];
     saveCartLoal();
     updateNavBadge();
-    alert("สั่งอาหารเรียบร้อย!");
+    // alert("สั่งอาหารเรียบร้อย!"); // Moved to SSE Listener
     switchView('menu');
+}
+
+// --- SSE & WAITING UI ---
+
+function showWaitingModal() {
+    const modal = document.createElement('div');
+    modal.id = 'waiting-modal';
+    modal.className = 'fixed inset-0 z-50 flex items-center justify-center bg-black bg-opacity-80 backdrop-blur-sm';
+    modal.innerHTML = `
+        <div class="bg-white dark:bg-card-dark p-8 rounded-2xl shadow-2xl flex flex-col items-center text-center max-w-xs mx-4">
+            <div class="animate-spin h-16 w-16 border-4 border-primary border-t-transparent rounded-full mb-6"></div>
+            <h3 class="text-xl font-bold mb-2 dark:text-white">กำลังส่งออเดอร์...</h3>
+            <p class="text-gray-500 dark:text-gray-400">กรุณารอสักครู่ ทางร้านกำลังยืนยันรายการของท่าน</p>
+        </div>
+    `;
+    document.body.appendChild(modal);
+}
+
+function hideWaitingModal() {
+    const modal = document.getElementById('waiting-modal');
+    if (modal) modal.remove();
+}
+
+function waitForShopConfirmation(orderId) {
+    console.log("👂 Listening for confirmation:", orderId);
+
+    // Safety Net: Timeout 30s
+    const timeout = setTimeout(() => {
+        if (evtSource) {
+            evtSource.close();
+            hideWaitingModal();
+            alert("ร้านค้ายังไม่ตอบรับเวลานานเกินไป กรุณาแจ้งพนักงานเพื่อเช็คออเดอร์");
+            // We do NOT clear the cart, so user can try again or show staff
+            const btn = document.querySelector('button[onclick="placeOrder()"]');
+            if (btn) { btn.innerText = "ลองใหม่อีกครั้ง"; btn.disabled = false; }
+        }
+    }, 30000);
+
+    const evtSource = new EventSource(`${CLOUD_FUNCTION_URL}/events/order?orderId=${orderId}`);
+
+    evtSource.onmessage = (event) => {
+        try {
+            const data = JSON.parse(event.data);
+            if (data.status === 'RECEIVED') {
+                console.log("✅ Confirmation Received!");
+                clearTimeout(timeout);
+                evtSource.close();
+                hideWaitingModal();
+
+                // Show Success & Clear
+                alert("สั่งอาหารเรียบร้อย! ทางร้านได้รับออเดอร์แล้ว");
+                handleOrderSuccess();
+            }
+        } catch (e) {
+            console.error("SSE Parse Error:", e);
+        }
+    };
+
+    evtSource.onerror = (err) => {
+        console.error("SSE Error:", err);
+        // Don't close immediately on transient errors, let browser retry.
+        // But if it fails too long, the timeout above will kill it.
+    };
 }
 
 
