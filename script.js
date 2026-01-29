@@ -824,12 +824,31 @@ function updateModalToSuccess() {
 }
 
 function waitForShopConfirmation(orderId) {
-    console.log("👂 Listening for confirmation via SSE:", orderId);
+    console.log("👂 Listening for confirmation (Hybrid: SSE + Check):", orderId);
+
+    let isConfirmed = false;
+    let evtSource = null;
+
+    // Common Success Handler
+    const handleConfirmation = () => {
+        if (isConfirmed) return;
+        isConfirmed = true;
+
+        console.log("✅ Confirmation Received!");
+        clearTimeout(timeout);
+
+        if (evtSource) {
+            evtSource.close();
+        }
+
+        updateModalToSuccess();
+        // Wait 2 seconds handled by button click or manual close
+    };
 
     // Safety Net: Client-side Timeout 35s
     const timeout = setTimeout(() => {
-        if (evtSource) {
-            evtSource.close();
+        if (!isConfirmed) {
+            if (evtSource) evtSource.close();
             hideWaitingModal();
             alert("หมดเวลา: ร้านค้ายุ่งหรือยังไม่ตอบรับเวลานานเกินไป กรุณาแจ้งพนักงาน");
             const btn = document.querySelector('button[onclick="placeOrder()"]');
@@ -837,33 +856,25 @@ function waitForShopConfirmation(orderId) {
         }
     }, 35000);
 
-    const evtSource = new EventSource(`${CLOUD_FUNCTION_URL}/events/order?orderId=${orderId}`);
+    // 1. SSE Listener
+    evtSource = new EventSource(`${CLOUD_FUNCTION_URL}/events/order?orderId=${orderId}`);
 
     evtSource.onopen = () => {
         console.log("🟢 SSE Connection Opened! ReadyState:", evtSource.readyState);
     };
 
     evtSource.onmessage = (event) => {
-        console.log("📩 SSE Message Received:", event.data); // Verbose Log
+        console.log("📩 SSE Message Received:", event.data);
         try {
             const data = JSON.parse(event.data);
-
             if (data.status === 'RECEIVED') {
-                console.log("✅ SSE Confirmation Received!");
-                clearTimeout(timeout);
-                evtSource.close();
-
-                // Trigger UI Update (Button will handle close)
-                updateModalToSuccess();
-                // NO auto-close setTimeout here!
+                handleConfirmation();
+            } else if (data.serverStatus === 'RECEIVED') {
+                // Support DEBUG payload
+                handleConfirmation();
             } else if (data.error === 'TIMEOUT') {
                 console.warn("⚠️ Server Timeout Message Received");
-                clearTimeout(timeout);
-                evtSource.close();
-                hideWaitingModal();
-                alert("หมดเวลา: ร้านค้ายุ่งหรือยังไม่ตอบรับ กรุณาแจ้งพนักงาน");
-                const btn = document.querySelector('button[onclick="placeOrder()"]');
-                if (btn) { btn.innerText = "ลองใหม่อีกครั้ง"; btn.disabled = false; }
+                // Do nothing, let client timeout handle it, or user retry
             }
         } catch (e) {
             console.error("SSE Parse Error:", e);
@@ -873,6 +884,19 @@ function waitForShopConfirmation(orderId) {
     evtSource.onerror = (err) => {
         console.error("SSE Error:", err);
     };
+
+    // 2. IMMEDIATE CHECK (Race Condition Fix)
+    // If the notification was instant and we missed the 'event', this fetch will catch it.
+    fetch(`${CLOUD_FUNCTION_URL}/order-status?orderId=${orderId}&ts=${Date.now()}`)
+        .then(res => res.json())
+        .then(data => {
+            console.log("🔎 Manual Check Status:", data);
+            if (data.status === 'RECEIVED') {
+                console.log("✅ Found confirmed status via Manual Check!");
+                handleConfirmation();
+            }
+        })
+        .catch(err => console.error("Manual Check Error:", err));
 }
 
 
