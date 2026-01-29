@@ -730,22 +730,30 @@ async function placeOrder() {
     };
 
     // --- PHASE 1 ---
+
+    // CHANGED: Show Modal IMMEDIATELY (UX: Instant Feedback)
+    showWaitingModal();
+
     for (let attempt = 1; attempt <= PHASE1_RETRIES; attempt++) {
         try {
             console.log(`Sending Order (Phase 1: ${attempt}/${PHASE1_RETRIES})...`);
-            if (btn) btn.innerText = `กำลังส่ง (${attempt}/${PHASE1_RETRIES})...`;
+            // if (btn) btn.innerText = `กำลังส่ง (${attempt}/${PHASE1_RETRIES})...`; // Modal covers this now
 
             await trySend(payload);
 
-            // CHANGED: Instead of instant success, we now wait for Shop Confirmation
-            showWaitingModal();
+            // CHANGED: Wait for Shop Confirmation (Modal is already Open)
             waitForShopConfirmation(orderId);
             return;
         } catch (e) {
+            // If failed, maybe hide modal or update text? For now, we retry quietly or just log
             console.error(`Phase 1 Attempt ${attempt} failed:`, e);
             if (attempt < PHASE1_RETRIES) await new Promise(r => setTimeout(r, PHASE1_DELAY));
         }
     }
+
+    // If we exit loop without return, Phase 1 Failed completely
+    hideWaitingModal(); // Hide before Phase 2 prompt (or keep it?)
+    // Actually existing logic has a pause...
 
     // --- PAUSE ("ไม่ได้ส่งอะไรนานๆ") ---
     console.log("Phase 1 failed. Waiting for Phase 2...");
@@ -755,13 +763,9 @@ async function placeOrder() {
     // --- PHASE 2 (Resend Everything "Recheck") ---
     for (let attempt = 1; attempt <= PHASE2_RETRIES; attempt++) {
         try {
-            console.log(`Sending Order (Phase 2: ${attempt}/${PHASE2_RETRIES})...`);
-            if (btn) btn.innerText = `รีเช็คข้อมูล (${attempt}/${PHASE2_RETRIES})...`;
-
+            // ... Phase 2 Logic ...
+            showWaitingModal(); // Ensure it's back up
             await trySend(payload);
-
-            // CHANGED: Wait for confirmation here too
-            showWaitingModal();
             waitForShopConfirmation(orderId);
             return;
         } catch (e) {
@@ -771,6 +775,7 @@ async function placeOrder() {
     }
 
     // Final Failure
+    hideWaitingModal();
     alert("ไม่สามารถส่งออเดอร์ได้ กรุณาแคปหน้าจอแล้วแจ้งพนักงาน");
     if (btn) { btn.innerText = "ลองใหม่อีกครั้ง"; btn.disabled = false; }
 }
@@ -786,17 +791,31 @@ function handleOrderSuccess() {
 // --- SSE & WAITING UI ---
 
 function showWaitingModal() {
+    if (document.getElementById('waiting-modal')) return; // Prevent duplicates
     const modal = document.createElement('div');
     modal.id = 'waiting-modal';
     modal.className = 'fixed inset-0 z-50 flex items-center justify-center bg-black bg-opacity-80 backdrop-blur-sm';
     modal.innerHTML = `
-        <div class="bg-white dark:bg-card-dark p-8 rounded-2xl shadow-2xl flex flex-col items-center text-center max-w-xs mx-4">
+        <div id="waiting-content" class="bg-white dark:bg-card-dark p-8 rounded-2xl shadow-2xl flex flex-col items-center text-center max-w-xs mx-4 transform transition-all scale-100">
             <div class="animate-spin h-16 w-16 border-4 border-primary border-t-transparent rounded-full mb-6"></div>
             <h3 class="text-xl font-bold mb-2 dark:text-white">กำลังส่งออเดอร์...</h3>
             <p class="text-gray-500 dark:text-gray-400">กรุณารอสักครู่ ทางร้านกำลังยืนยันรายการของท่าน</p>
         </div>
     `;
     document.body.appendChild(modal);
+}
+
+function updateModalSuccess() {
+    const content = document.getElementById('waiting-content');
+    if (content) {
+        content.innerHTML = `
+            <div class="h-16 w-16 bg-green-500 rounded-full flex items-center justify-center mb-6 animate-bounce">
+                <span class="material-symbols-outlined text-white text-4xl">check</span>
+            </div>
+            <h3 class="text-2xl font-bold mb-2 text-green-600 dark:text-green-400">สำเร็จ!</h3>
+            <p class="text-gray-500 dark:text-gray-400">ทางร้านได้รับออเดอร์แล้ว</p>
+        `;
+    }
 }
 
 function hideWaitingModal() {
@@ -824,15 +843,29 @@ function waitForShopConfirmation(orderId) {
     evtSource.onmessage = (event) => {
         try {
             const data = JSON.parse(event.data);
-            if (data.status === 'RECEIVED') {
+
+            // Handle CONNECTED event for debug
+            if (data.status === 'CONNECTED') {
+                console.log("📡 SSE Connected");
+            }
+            // Handle WAITING event
+            else if (data.status === 'WAITING') {
+                console.log("⏳ Still Waiting...");
+            }
+            // Handle RECEIVED (Success)
+            else if (data.status === 'RECEIVED') {
                 console.log("✅ Confirmation Received!");
                 clearTimeout(timeout);
                 evtSource.close();
-                hideWaitingModal();
 
-                // Show Success & Clear
-                alert("สั่งอาหารเรียบร้อย! ทางร้านได้รับออเดอร์แล้ว");
-                handleOrderSuccess();
+                // UX: Show Success in Modal
+                updateModalSuccess();
+
+                // Delay closing to let user see the success state
+                setTimeout(() => {
+                    hideWaitingModal();
+                    handleOrderSuccess();
+                }, 2000);
             }
         } catch (e) {
             console.error("SSE Parse Error:", e);
