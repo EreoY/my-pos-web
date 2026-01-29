@@ -828,11 +828,24 @@ function waitForShopConfirmation(orderId) {
                 console.log("✅ Confirmation Received!");
                 clearTimeout(timeout);
                 evtSource.close();
-                hideWaitingModal();
 
-                // Show Success & Clear
-                alert("สั่งอาหารเรียบร้อย! ทางร้านได้รับออเดอร์แล้ว");
-                handleOrderSuccess();
+                // Update Modal to Success State
+                const modalParams = document.querySelector('#waiting-modal > div');
+                if (modalParams) {
+                    modalParams.innerHTML = `
+                        <div class="h-16 w-16 mb-6 rounded-full bg-green-100 flex items-center justify-center">
+                            <span class="material-symbols-outlined text-4xl text-green-600">check_circle</span>
+                        </div>
+                        <h3 class="text-xl font-bold mb-2 dark:text-white">สั่งอาหารสำเร็จ!</h3>
+                        <p class="text-gray-500 dark:text-gray-400">ร้านค้าได้รับออเดอร์ของท่านแล้ว</p>
+                    `;
+                }
+
+                // Wait 2 seconds then continue
+                setTimeout(() => {
+                    hideWaitingModal();
+                    handleOrderSuccess();
+                }, 2000);
             }
         } catch (e) {
             console.error("SSE Parse Error:", e);
