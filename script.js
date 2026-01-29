@@ -824,20 +824,24 @@ function hideWaitingModal() {
 }
 
 function waitForShopConfirmation(orderId) {
-    console.log("👂 Polling for confirmation:", orderId);
+    console.log("👂 SSE Listening for confirmation:", orderId);
 
-    const checkStatus = async () => {
+    // 1. Establish SSE Connection
+    const evtSource = new EventSource(`${CLOUD_FUNCTION_URL}/events/order?orderId=${orderId}`);
+
+    evtSource.onmessage = (event) => {
         try {
-            const res = await fetch(`${CLOUD_FUNCTION_URL}/order-status?orderId=${orderId}`);
-            if (!res.ok) return; // Silent retry
+            const data = JSON.parse(event.data);
 
-            const data = await res.json();
-            console.log(`[Polling] Order ${orderId} Status: ${data.status}`);
-
-            if (data.status && data.status.toUpperCase() === 'RECEIVED') {
+            // Handle CONNECTED
+            if (data.status === 'CONNECTED') {
+                console.log("📡 SSE Connected");
+            }
+            // Handle RECEIVED (Success)
+            else if (data.status === 'RECEIVED') {
                 console.log("✅ Confirmation Received!");
-                clearInterval(pollInterval);
                 clearTimeout(timeout);
+                evtSource.close();
 
                 // UX: Show Success in Modal
                 updateModalSuccess();
@@ -849,18 +853,19 @@ function waitForShopConfirmation(orderId) {
                 }, 2000);
             }
         } catch (e) {
-            console.error("Polling Error:", e);
+            console.error("SSE Parse Error:", e);
         }
     };
 
-    // 1. Start Polling Loop (Every 3 seconds)
-    const pollInterval = setInterval(checkStatus, 3000);
-    // Initial Valid Check immediately
-    checkStatus();
+    evtSource.onerror = (err) => {
+        // We do NOT close or alert here. We let the browser Auto-Reconnect.
+        console.log("🔄 SSE connection lost, browser will auto-reconnect...", err);
+    };
 
     // 2. Safety Net: Timeout 60s
+    // If we haven't received confirmation in 60s total, we give up.
     const timeout = setTimeout(() => {
-        clearInterval(pollInterval);
+        evtSource.close();
         hideWaitingModal();
         alert("ร้านค้ายังไม่ตอบรับเวลานานเกินไป กรุณาแจ้งพนักงานเพื่อเช็คออเดอร์");
 
