@@ -839,7 +839,12 @@ function waitForShopConfirmation(orderId) {
 
     const evtSource = new EventSource(`${CLOUD_FUNCTION_URL}/events/order?orderId=${orderId}`);
 
+    evtSource.onopen = () => {
+        console.log("🟢 SSE Connection Opened! ReadyState:", evtSource.readyState);
+    };
+
     evtSource.onmessage = (event) => {
+        console.log("📩 SSE Message Received:", event.data); // Verbose Log
         try {
             const data = JSON.parse(event.data);
 
