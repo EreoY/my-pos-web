@@ -824,59 +824,49 @@ function hideWaitingModal() {
 }
 
 function waitForShopConfirmation(orderId) {
-    console.log("👂 Listening for confirmation:", orderId);
+    console.log("👂 Polling for confirmation:", orderId);
 
-    // Safety Net: Timeout 30s
-    const timeout = setTimeout(() => {
-        if (evtSource) {
-            evtSource.close();
-            hideWaitingModal();
-            alert("ร้านค้ายังไม่ตอบรับเวลานานเกินไป กรุณาแจ้งพนักงานเพื่อเช็คออเดอร์");
-            // We do NOT clear the cart, so user can try again or show staff
-            const btn = document.querySelector('button[onclick="placeOrder()"]');
-            if (btn) { btn.innerText = "ลองใหม่อีกครั้ง"; btn.disabled = false; }
-        }
-    }, 30000);
-
-    const evtSource = new EventSource(`${CLOUD_FUNCTION_URL}/events/order?orderId=${orderId}`);
-
-    evtSource.onmessage = (event) => {
+    const checkStatus = async () => {
         try {
-            const data = JSON.parse(event.data);
+            const res = await fetch(`${CLOUD_FUNCTION_URL}/order-status?orderId=${orderId}`);
+            if (!res.ok) return; // Silent retry
 
-            // Handle CONNECTED event for debug
-            if (data.status === 'CONNECTED') {
-                console.log("📡 SSE Connected");
-            }
-            // Handle WAITING event
-            else if (data.status === 'WAITING') {
-                console.log("⏳ Still Waiting...");
-            }
-            // Handle RECEIVED (Success)
-            else if (data.status === 'RECEIVED') {
+            const data = await res.json();
+            console.log(`[Polling] Order ${orderId} Status: ${data.status}`);
+
+            if (data.status && data.status.toUpperCase() === 'RECEIVED') {
                 console.log("✅ Confirmation Received!");
+                clearInterval(pollInterval);
                 clearTimeout(timeout);
-                evtSource.close();
 
                 // UX: Show Success in Modal
                 updateModalSuccess();
 
-                // Delay closing to let user see the success state
+                // Delay closing
                 setTimeout(() => {
                     hideWaitingModal();
                     handleOrderSuccess();
                 }, 2000);
             }
         } catch (e) {
-            console.error("SSE Parse Error:", e);
+            console.error("Polling Error:", e);
         }
     };
 
-    evtSource.onerror = (err) => {
-        console.error("SSE Error:", err);
-        // Don't close immediately on transient errors, let browser retry.
-        // But if it fails too long, the timeout above will kill it.
-    };
+    // 1. Start Polling Loop (Every 3 seconds)
+    const pollInterval = setInterval(checkStatus, 3000);
+    // Initial Valid Check immediately
+    checkStatus();
+
+    // 2. Safety Net: Timeout 60s
+    const timeout = setTimeout(() => {
+        clearInterval(pollInterval);
+        hideWaitingModal();
+        alert("ร้านค้ายังไม่ตอบรับเวลานานเกินไป กรุณาแจ้งพนักงานเพื่อเช็คออเดอร์");
+
+        const btn = document.querySelector('button[onclick="placeOrder()"]');
+        if (btn) { btn.innerText = "ลองใหม่อีกครั้ง"; btn.disabled = false; }
+    }, 60000);
 }
 
 
