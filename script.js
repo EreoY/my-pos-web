@@ -783,98 +783,56 @@ function handleOrderSuccess() {
     switchView('menu');
 }
 
-// --- POLLING & WAITING UI (Robust Strategy) ---
+// --- SSE & WAITING UI ---
 
 function showWaitingModal() {
-    // 1. Aggressive Cleanup: Remove ANY existing modals
-    document.querySelectorAll('#waiting-modal').forEach(el => el.remove());
-
     const modal = document.createElement('div');
     modal.id = 'waiting-modal';
     modal.className = 'fixed inset-0 z-50 flex items-center justify-center bg-black bg-opacity-80 backdrop-blur-sm';
     modal.innerHTML = `
-        <div id="modal-content" class="bg-white dark:bg-card-dark p-8 rounded-2xl shadow-2xl flex flex-col items-center text-center max-w-xs mx-4 transform transition-all">
-            <div id="modal-icon" class="animate-spin h-16 w-16 border-4 border-primary border-t-transparent rounded-full mb-6 relative"></div>
-            <h3 id="modal-title" class="text-xl font-bold mb-2 dark:text-white">กำลังส่งออเดอร์...</h3>
-            <p id="modal-desc" class="text-gray-500 dark:text-gray-400">กรุณารอสักครู่ ทางร้านกำลังยืนยันรายการของท่าน</p>
+        <div class="bg-white dark:bg-card-dark p-8 rounded-2xl shadow-2xl flex flex-col items-center text-center max-w-xs mx-4">
+            <div class="animate-spin h-16 w-16 border-4 border-primary border-t-transparent rounded-full mb-6"></div>
+            <h3 class="text-xl font-bold mb-2 dark:text-white">กำลังส่งออเดอร์...</h3>
+            <p class="text-gray-500 dark:text-gray-400">กรุณารอสักครู่ ทางร้านกำลังยืนยันรายการของท่าน</p>
         </div>
     `;
     document.body.appendChild(modal);
 }
 
 function hideWaitingModal() {
-    document.querySelectorAll('#waiting-modal').forEach(el => el.remove());
-}
-
-function updateModalToSuccess() {
-    const content = document.getElementById('modal-content');
-    if (!content) return;
-
-    // Update Content with BUTTON
-    content.innerHTML = `
-        <div class="h-16 w-16 mb-6 rounded-full bg-green-100 flex items-center justify-center animate-bounce">
-             <span class="material-symbols-outlined text-4xl text-green-600">check_circle</span>
-        </div>
-        <h3 class="text-xl font-bold mb-2 dark:text-white">สำเร็จ!</h3>
-        <p class="text-gray-500 dark:text-gray-400 mb-6">ร้านค้าได้รับออเดอร์แล้ว</p>
-        <button onclick="hideWaitingModal(); handleOrderSuccess()" class="w-full bg-primary text-white font-bold py-3 rounded-xl shadow-lg hover:bg-green-600 transition-colors">
-            ตกลง
-        </button>
-    `;
+    const modal = document.getElementById('waiting-modal');
+    if (modal) modal.remove();
 }
 
 function waitForShopConfirmation(orderId) {
-    console.log("👂 Listening for confirmation (Hybrid: SSE + Check):", orderId);
+    console.log("👂 Listening for confirmation:", orderId);
 
-    let isConfirmed = false;
-    let evtSource = null;
-
-    // Common Success Handler
-    const handleConfirmation = () => {
-        if (isConfirmed) return;
-        isConfirmed = true;
-
-        console.log("✅ Confirmation Received!");
-        clearTimeout(timeout);
-
+    // Safety Net: Timeout 30s
+    const timeout = setTimeout(() => {
         if (evtSource) {
             evtSource.close();
-        }
-
-        updateModalToSuccess();
-        // Wait 2 seconds handled by button click or manual close
-    };
-
-    // Safety Net: Client-side Timeout 35s
-    const timeout = setTimeout(() => {
-        if (!isConfirmed) {
-            if (evtSource) evtSource.close();
             hideWaitingModal();
-            alert("หมดเวลา: ร้านค้ายุ่งหรือยังไม่ตอบรับเวลานานเกินไป กรุณาแจ้งพนักงาน");
+            alert("ร้านค้ายังไม่ตอบรับเวลานานเกินไป กรุณาแจ้งพนักงานเพื่อเช็คออเดอร์");
+            // We do NOT clear the cart, so user can try again or show staff
             const btn = document.querySelector('button[onclick="placeOrder()"]');
             if (btn) { btn.innerText = "ลองใหม่อีกครั้ง"; btn.disabled = false; }
         }
-    }, 35000);
+    }, 30000);
 
-    // 1. SSE Listener
-    evtSource = new EventSource(`${CLOUD_FUNCTION_URL}/events/order?orderId=${orderId}`);
-
-    evtSource.onopen = () => {
-        console.log("🟢 SSE Connection Opened! ReadyState:", evtSource.readyState);
-    };
+    const evtSource = new EventSource(`${CLOUD_FUNCTION_URL}/events/order?orderId=${orderId}`);
 
     evtSource.onmessage = (event) => {
-        console.log("📩 SSE Message Received:", event.data);
         try {
             const data = JSON.parse(event.data);
             if (data.status === 'RECEIVED') {
-                handleConfirmation();
-            } else if (data.serverStatus === 'RECEIVED') {
-                // Support DEBUG payload
-                handleConfirmation();
-            } else if (data.error === 'TIMEOUT') {
-                console.warn("⚠️ Server Timeout Message Received");
-                // Do nothing, let client timeout handle it, or user retry
+                console.log("✅ Confirmation Received!");
+                clearTimeout(timeout);
+                evtSource.close();
+                hideWaitingModal();
+
+                // Show Success & Clear
+                alert("สั่งอาหารเรียบร้อย! ทางร้านได้รับออเดอร์แล้ว");
+                handleOrderSuccess();
             }
         } catch (e) {
             console.error("SSE Parse Error:", e);
@@ -883,20 +841,9 @@ function waitForShopConfirmation(orderId) {
 
     evtSource.onerror = (err) => {
         console.error("SSE Error:", err);
+        // Don't close immediately on transient errors, let browser retry.
+        // But if it fails too long, the timeout above will kill it.
     };
-
-    // 2. IMMEDIATE CHECK (Race Condition Fix)
-    // If the notification was instant and we missed the 'event', this fetch will catch it.
-    fetch(`${CLOUD_FUNCTION_URL}/order-status?orderId=${orderId}&ts=${Date.now()}`)
-        .then(res => res.json())
-        .then(data => {
-            console.log("🔎 Manual Check Status:", data);
-            if (data.status === 'RECEIVED') {
-                console.log("✅ Found confirmed status via Manual Check!");
-                handleConfirmation();
-            }
-        })
-        .catch(err => console.error("Manual Check Error:", err));
 }
 
 
