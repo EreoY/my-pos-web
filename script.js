@@ -118,19 +118,16 @@ async function checkActiveOrder() {
         // Optional: Check if already received (Optimization)
         // DELAY: Wait 2s to allow D1 Propagation (Avoid False Ghost Detection)
         setTimeout(async () => {
+            let isGhost = false;
             try {
                 const res = await fetch(`${CLOUD_FUNCTION_URL}/order-status?orderId=${activeOrderId}`);
 
-                // GHOST ORDER CHECK
+                // GHOST ORDER CHECK (Strict 404)
                 if (res.status === 404) {
-                    console.warn("Ghost order detected. Cleaning up.");
-                    localStorage.removeItem('current_order_id');
-                    hideWaitingModal();
-                    alert("ไม่พบข้อมูลออเดอร์ กรุณาลองใหม่อีกครั้ง");
-                    return;
+                    isGhost = true;
                 }
-
-                if (res.ok) {
+                // Check if already success (Optimization)
+                else if (res.ok) {
                     const data = await res.json();
                     if (data.status === 'RECEIVED') {
                         updateModalSuccess();
@@ -138,13 +135,23 @@ async function checkActiveOrder() {
                             hideWaitingModal();
                             handleOrderSuccess();
                         }, 1000);
-                        return;
+                        return; // Done, no need to wait/listen
                     }
                 }
-            } catch (e) { console.error("Recovery check failed:", e); }
-        }, 2000);
+            } catch (e) {
+                console.error("Recovery check failed (Network?), proceeding optimistically:", e);
+            }
 
-        waitForShopConfirmation(activeOrderId);
+            if (isGhost) {
+                console.warn("Ghost order detected. Cleaning up.");
+                localStorage.removeItem('current_order_id');
+                hideWaitingModal();
+                alert("ไม่พบข้อมูลออเดอร์ กรุณาลองใหม่อีกครั้ง");
+            } else {
+                // Determine valid (or unknown error), start listening
+                waitForShopConfirmation(activeOrderId);
+            }
+        }, 2000);
     }
 }
 
