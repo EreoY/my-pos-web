@@ -365,7 +365,7 @@ function renderMenuPage() {
             <!-- Header -->
             <div class="flex items-center justify-between px-4 py-3 bg-white/90 dark:bg-background-dark/90 backdrop-blur-md sticky top-0 z-10 border-b border-gray-100 dark:border-gray-800">
                 <div class="flex items-center gap-3">
-                    <img src="https://via.placeholder.com/40" class="w-10 h-10 rounded-full shadow-sm bg-gray-200 object-cover" alt="Shop Logo">
+                    <img src="https://placehold.co/40" class="w-10 h-10 rounded-full shadow-sm bg-gray-200 object-cover" alt="Shop Logo">
                     <div>
                         <h1 class="text-[#121811] dark:text-white font-bold text-lg leading-tight tracking-tight">
                             ${SHOP_NAME || 'ร้านอาหาร'}
