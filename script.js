@@ -3,6 +3,7 @@ const CLOUD_FUNCTION_URL = "https://pos-api-worker.jitkhon1979.workers.dev";
 
 // --- STATE ---
 let SHOP_ID = null;
+let SHOP_NAME = null; // Defined for Header
 let TABLE_NO = null;
 let SESSION_ID = null;
 
@@ -298,6 +299,11 @@ async function loadMenu() {
         const res = await fetch(`${R2_BASE_URL}/shops/${SHOP_ID}/menu.json`);
         if (res.ok) {
             const data = await res.json();
+
+            // Try to extract Shop Name if available in JSON
+            if (data.shopName) SHOP_NAME = data.shopName;
+            else if (data.shop_name) SHOP_NAME = data.shop_name;
+
             if (data.categories) MENU = data.categories;
             else if (data.items && data.items.length > 0 && data.items[0].items) MENU = data.items;
             else MENU = [{ id: 'default', name: 'General', items: data.items || [] }];
@@ -349,7 +355,7 @@ function renderMenuPage() {
                     <img src="https://via.placeholder.com/40" class="w-10 h-10 rounded-full shadow-sm bg-gray-200 object-cover" alt="Shop Logo">
                     <div>
                         <h1 class="text-[#121811] dark:text-white font-bold text-lg leading-tight tracking-tight">
-                            ${SHOP_NAME}
+                            ${SHOP_NAME || 'ร้านอาหาร'}
                         </h1>
                         <div class="flex items-center gap-1 cursor-pointer group">
                             <span class="material-symbols-outlined text-primary text-[18px]">location_on</span>
