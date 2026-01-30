@@ -1031,98 +1031,46 @@ async function renderBillPage() {
     }
 }
 
-// 5. CALL STAFF MODAL (New Feature)
-window.openCallStaffModal = () => {
-    const modal = document.getElementById('item-modal-container');
-    modal.classList.remove('hidden');
-    // Allow reflow for transition
+
+// 5. SERVICE MODAL (Clean Implementation)
+window.showServiceModal = () => {
+    const modal = document.getElementById('service-modal');
+    const content = document.getElementById('service-modal-content');
+
+    modal.classList.remove('invisible', 'opacity-0');
+    // Allow reflow
     setTimeout(() => {
-        modal.classList.remove('translate-y-full');
+        content.classList.remove('translate-y-full');
     }, 10);
-
-    modal.innerHTML = `
-        <div class="bg-black/50 fixed inset-0 z-40" onclick="closeItemDetail()"></div>
-        <div class="relative z-50 mt-auto w-full bg-surface-light dark:bg-background-dark rounded-t-3xl p-6 pb-12 shadow-[0_-10px_40px_rgba(0,0,0,0.1)]">
-            <div class="w-12 h-1.5 bg-gray-300 dark:bg-gray-700 rounded-full mx-auto mb-6"></div>
-            
-            <h2 class="text-xl font-bold text-center mb-8 text-[#121811] dark:text-white">ต้องการความช่วยเหลือ?</h2>
-
-            <div class="grid gap-4">
-                <button onclick="sendCallStaffRequest('CHECK_BILL')" class="flex items-center gap-4 p-4 rounded-xl bg-green-50 dark:bg-green-900/20 active:scale-98 transition-transform">
-                    <div class="w-12 h-12 rounded-full bg-green-100 dark:bg-green-800 flex items-center justify-center text-green-700 dark:text-green-300">
-                        <span class="material-symbols-outlined text-2xl">payments</span>
-                    </div>
-                    <div class="text-left">
-                        <h3 class="font-bold text-green-900 dark:text-green-100">เรียกเช็คบิล</h3>
-                        <p class="text-xs text-green-700 dark:text-green-300">ชำระเงิน / เก็บเงิน</p>
-                    </div>
-                </button>
-
-                <button onclick="sendCallStaffRequest('CALL_STAFF')" class="flex items-center gap-4 p-4 rounded-xl bg-orange-50 dark:bg-orange-900/20 active:scale-98 transition-transform">
-                     <div class="w-12 h-12 rounded-full bg-orange-100 dark:bg-orange-800 flex items-center justify-center text-orange-700 dark:text-orange-300">
-                        <span class="material-symbols-outlined text-2xl">person_raised_hand</span>
-                    </div>
-                    <div class="text-left">
-                        <h3 class="font-bold text-orange-900 dark:text-orange-100">เรียกพนักงาน</h3>
-                        <p class="text-xs text-orange-700 dark:text-orange-300">สอบถาม / สั่งเพิ่ม</p>
-                    </div>
-                </button>
-
-                <button onclick="sendCallStaffRequest('EDIT_ORDER')" class="flex items-center gap-4 p-4 rounded-xl bg-blue-50 dark:bg-blue-900/20 active:scale-98 transition-transform">
-                     <div class="w-12 h-12 rounded-full bg-blue-100 dark:bg-blue-800 flex items-center justify-center text-blue-700 dark:text-blue-300">
-                        <span class="material-symbols-outlined text-2xl">edit_note</span>
-                    </div>
-                    <div class="text-left">
-                        <h3 class="font-bold text-blue-900 dark:text-blue-100">แก้ไขออเดอร์</h3>
-                        <p class="text-xs text-blue-700 dark:text-blue-300">แจ้งเปลี่ยนแปลงรายการ</p>
-                    </div>
-                </button>
-            </div>
-             <button onclick="closeItemDetail()" class="mt-8 w-full py-3 text-gray-500 font-medium">ปิด</button>
-        </div>
-    `;
 };
 
-window.sendCallStaffRequest = async (subtype) => {
-    // Show Loading
-    const modal = document.getElementById('item-modal-container');
-    modal.innerHTML = `
-         <div class="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm">
-            <div class="bg-white dark:bg-card-dark p-6 rounded-2xl flex flex-col items-center">
-                <div class="animate-spin h-10 w-10 border-4 border-primary border-t-transparent rounded-full mb-4"></div>
-                <p class="font-bold text-gray-800 dark:text-white">กำลังเรียกพนักงาน...</p>
-            </div>
-         </div>
-    `;
+window.closeServiceModal = () => {
+    const modal = document.getElementById('service-modal');
+    const content = document.getElementById('service-modal-content');
+
+    content.classList.add('translate-y-full');
+    setTimeout(() => {
+        modal.classList.add('invisible', 'opacity-0');
+    }, 300); // Match transition duration
+};
+
+window.requestService = async (type) => {
+    // Optimistic Feedback (Fire and Forget)
+    closeServiceModal();
+    alert("ส่งคำขอเรียบร้อยแล้ว พนักงานจะรีบมาให้บริการครับ");
 
     try {
-        await fetch(CLOUD_FUNCTION_URL, {
+        // Send to Dedicated Endpoint
+        await fetch(`${CLOUD_FUNCTION_URL}/call-staff`, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({
-                type: 'CALL_STAFF',
-                shopId: SHOP_ID,
                 tableId: TABLE_NO,
-                subtype: subtype
+                shopId: SHOP_ID,
+                type: type
             })
         });
-
-        // Success Feedback
-        modal.innerHTML = `
-             <div class="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm">
-                <div class="bg-white dark:bg-card-dark p-6 rounded-2xl flex flex-col items-center">
-                    <div class="h-12 w-12 bg-green-100 rounded-full flex items-center justify-center mb-4">
-                        <span class="material-symbols-outlined text-green-600 text-3xl">check</span>
-                    </div>
-                    <p class="font-bold text-gray-800 dark:text-white">แจ้งเตือนแล้ว</p>
-                    <p class="text-xs text-gray-500 mt-1">พนักงานกำลังมาครับ</p>
-                </div>
-             </div>
-        `;
-        setTimeout(() => closeItemDetail(), 2000);
-
     } catch (e) {
-        alert("การเชื่อมต่อขัดข้อง กรุณาลองใหม่");
-        closeItemDetail();
+        console.error("Service request failed silently:", e);
     }
 };
