@@ -711,6 +711,9 @@ async function placeOrder() {
     // Generate Request UUID (Deduplication Key)
     const orderId = `ord_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
 
+    // IMMEDIATE SAVE: Persist state before doing any heavy lifting
+    localStorage.setItem('current_order_id', orderId);
+
     const payload = {
         type: "PLACE_ORDER", // Updated Type
         shopId: SHOP_ID,
@@ -734,8 +737,7 @@ async function placeOrder() {
         }
     };
 
-    // PERSIST STATE
-    localStorage.setItem('current_order_id', orderId);
+    // (Available for other logic if needed)
 
     const btn = document.querySelector('button[onclick="placeOrder()"]');
     if (btn) { btn.innerText = "กำลังส่ง..."; btn.disabled = true; }
