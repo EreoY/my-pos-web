@@ -1,3 +1,16 @@
+// 🔒 Security: Disable logs in production
+(function () {
+    const isProduction = window.location.hostname !== 'localhost' && window.location.hostname !== '127.0.0.1';
+    if (isProduction) {
+        const nullFunc = function () { };
+        console.log = nullFunc;
+        console.info = nullFunc;
+        console.warn = nullFunc;
+        console.debug = nullFunc;
+        // console.error = nullFunc; // Uncomment if you want to hide errors too
+    }
+})();
+
 const R2_BASE_URL = "https://pub-95a66e290b0b4a03ad1abcef6de8b7da.r2.dev";
 const CLOUD_FUNCTION_URL = "https://pos-api-worker.jitkhon1979.workers.dev";
 
