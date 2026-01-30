@@ -18,6 +18,7 @@ const CLOUD_FUNCTION_URL = "https://pos-api-worker.jitkhon1979.workers.dev";
 let SHOP_ID = null;
 let TABLE_NO = null;
 let SESSION_ID = null;
+let SHOP_NAME = 'ร้านค้า'; // Default name to prevent ReferenceError
 
 let MENU = [];
 let CART = [];
@@ -314,6 +315,9 @@ async function loadMenu() {
             if (data.categories) MENU = data.categories;
             else if (data.items && data.items.length > 0 && data.items[0].items) MENU = data.items;
             else MENU = [{ id: 'default', name: 'General', items: data.items || [] }];
+
+            // Support customized shop name if provided in menu/meta
+            if (data.shop_name) SHOP_NAME = data.shop_name;
 
             switchView('menu'); // Initial View
         } else {
