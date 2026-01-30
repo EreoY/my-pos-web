@@ -116,29 +116,33 @@ async function checkActiveOrder() {
         console.log("🔄 Restoring active order:", activeOrderId);
         showWaitingModal();
         // Optional: Check if already received (Optimization)
-        try {
-            const res = await fetch(`${CLOUD_FUNCTION_URL}/order-status?orderId=${activeOrderId}`);
+        // DELAY: Wait 2s to allow D1 Propagation (Avoid False Ghost Detection)
+        setTimeout(async () => {
+            try {
+                const res = await fetch(`${CLOUD_FUNCTION_URL}/order-status?orderId=${activeOrderId}`);
 
-            // GHOST ORDER CHECK
-            if (res.status === 404) {
-                console.warn("Ghost order detected. Cleaning up.");
-                localStorage.removeItem('current_order_id');
-                hideWaitingModal();
-                return;
-            }
-
-            if (res.ok) {
-                const data = await res.json();
-                if (data.status === 'RECEIVED') {
-                    updateModalSuccess();
-                    setTimeout(() => {
-                        hideWaitingModal();
-                        handleOrderSuccess();
-                    }, 1000);
+                // GHOST ORDER CHECK
+                if (res.status === 404) {
+                    console.warn("Ghost order detected. Cleaning up.");
+                    localStorage.removeItem('current_order_id');
+                    hideWaitingModal();
+                    alert("ไม่พบข้อมูลออเดอร์ กรุณาลองใหม่อีกครั้ง");
                     return;
                 }
-            }
-        } catch (e) { console.error("Recovery check failed:", e); }
+
+                if (res.ok) {
+                    const data = await res.json();
+                    if (data.status === 'RECEIVED') {
+                        updateModalSuccess();
+                        setTimeout(() => {
+                            hideWaitingModal();
+                            handleOrderSuccess();
+                        }, 1000);
+                        return;
+                    }
+                }
+            } catch (e) { console.error("Recovery check failed:", e); }
+        }, 2000);
 
         waitForShopConfirmation(activeOrderId);
     }
