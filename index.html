@@ -118,11 +118,13 @@
                 <span class="text-xs font-medium">เมนู</span>
             </button>
 
-            <!-- Call Staff FAB (Replaces Cart) -->
-            <button onclick="openCallStaffModal()" id="nav-call"
-                class="relative -top-6 flex flex-col items-center justify-center w-16 h-16 rounded-full bg-primary shadow-lg border-4 border-surface-light dark:border-background-dark active:scale-95 transition-transform">
-                <span class="material-symbols-outlined text-[32px] text-[#121811]">notifications_active</span>
-            </button>
+            <!-- Call Staff FAB (Centered & Absolute) -->
+            <div class="relative w-16 h-0 flex justify-center items-center">
+                <button onclick="openCallStaffModal()" id="nav-call"
+                    class="absolute -top-12 h-16 w-16 rounded-full bg-primary shadow-[0_4px_20px_rgba(55,236,19,0.4)] border-4 border-surface-light dark:border-background-dark flex items-center justify-center text-[#121811] active:scale-90 transition-all duration-200 z-50">
+                    <span class="material-symbols-outlined text-[32px]">notifications_active</span>
+                </button>
+            </div>
 
             <!-- Bill Tab -->
             <button onclick="switchView('bill')" id="nav-bill"
