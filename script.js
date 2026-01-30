@@ -344,20 +344,29 @@ function renderMenuPage() {
     const html = `
         <div class="relative flex flex-col w-full">
             <!-- Header -->
-            <div class="sticky top-0 z-30 flex items-center bg-background-light/95 dark:bg-background-dark/95 backdrop-blur-sm p-4 justify-between transition-colors">
-                <div class="flex flex-col">
-                    <span class="text-xs text-gray-500 dark:text-gray-400 font-medium">ส่งไปที่</span>
-                    <div class="flex items-center gap-1 cursor-pointer group">
-                        <span class="material-symbols-outlined text-primary text-[18px]">location_on</span>
-                        <h2 class="text-[#121811] dark:text-white text-base font-bold leading-tight tracking-[-0.015em] group-hover:text-primary transition-colors">
-                            โต๊ะ ${TABLE_NO || '-'}
-                        </h2>
+            <div class="flex items-center justify-between px-4 py-3 bg-white/90 dark:bg-background-dark/90 backdrop-blur-md sticky top-0 z-10 border-b border-gray-100 dark:border-gray-800">
+                <div class="flex items-center gap-3">
+                    <img src="https://via.placeholder.com/40" class="w-10 h-10 rounded-full shadow-sm bg-gray-200 object-cover" alt="Shop Logo">
+                    <div>
+                        <h1 class="text-[#121811] dark:text-white font-bold text-lg leading-tight tracking-tight">
+                            ${SHOP_NAME}
+                        </h1>
+                        <div class="flex items-center gap-1 cursor-pointer group">
+                            <span class="material-symbols-outlined text-primary text-[18px]">location_on</span>
+                            <h2 class="text-[#121811] dark:text-white text-base font-bold leading-tight tracking-[-0.015em] group-hover:text-primary transition-colors">
+                                โต๊ะ ${TABLE_NO || '-'}
+                            </h2>
+                        </div>
                     </div>
                 </div>
                 <div class="flex w-12 items-center justify-end">
                     <button onclick="switchView('cart')" class="relative flex items-center justify-center rounded-full w-10 h-10 bg-white dark:bg-gray-800 shadow-sm text-[#121811] dark:text-white hover:bg-gray-50 dark:hover:bg-gray-700 transition-colors">
                         <span class="material-symbols-outlined" style="font-size: 24px;">shopping_basket</span>
-                         <span id="nav-cart-badge" class="absolute -top-1 -right-1 flex h-4 w-4 items-center justify-center rounded-full bg-red-500 text-[10px] font-bold text-white border-2 border-white dark:border-[#121811] opacity-0">0</span>
+                        ${(() => {
+            const count = CART.reduce((sum, item) => sum + item.qty, 0);
+            const hiddenClass = count > 0 ? '' : 'opacity-0';
+            return `<span id="nav-cart-badge" class="absolute -top-1 -right-1 flex h-4 w-4 items-center justify-center rounded-full bg-red-500 text-[10px] font-bold text-white border-2 border-white dark:border-[#121811] ${hiddenClass}">${count}</span>`;
+        })()}
                     </button>
                 </div>
             </div>
@@ -375,8 +384,8 @@ function renderMenuPage() {
                     <button onclick="setActiveCategory('${cat.id}')" 
                         class="flex h-10 shrink-0 items-center justify-center gap-x-2 rounded-full pl-5 pr-5 shadow-sm transition-transform active:scale-95 border border-transparent
                         ${cat.id === ACTIVE_CATEGORY
-            ? 'bg-[#121811] dark:bg-primary text-white dark:text-[#121811]'
-            : 'bg-white dark:bg-gray-800 text-[#121811] dark:text-gray-200 hover:border-gray-200 dark:hover:border-gray-700'}">
+                ? 'bg-[#121811] dark:bg-primary text-white dark:text-[#121811]'
+                : 'bg-white dark:bg-gray-800 text-[#121811] dark:text-gray-200 hover:border-gray-200 dark:hover:border-gray-700'}">
                         <p class="text-sm font-bold leading-normal">${cat.name}</p>
                     </button>
                 `).join('')}
@@ -395,7 +404,6 @@ function renderMenuPage() {
     `;
 
     document.getElementById('app-view').innerHTML = html;
-    updateNavBadge(); // Ensure badge is updated after re-render
 }
 
 function setActiveCategory(sysId) {
@@ -836,12 +844,19 @@ async function placeOrder() {
 }
 
 function handleOrderSuccess() {
-    localStorage.removeItem('current_order_id');
-    CART = [];
-    saveCartLoal();
-    updateNavBadge();
-    // alert("สั่งอาหารเรียบร้อย!"); // Moved to SSE Listener
-    switchView('menu');
+    try {
+        localStorage.removeItem('current_order_id');
+        CART = [];
+        saveCartLoal();
+        // Try update badge if possible (might fail if view not ready, handled by guard)
+        try { updateNavBadge(); } catch (e) { }
+        switchView('menu');
+    } catch (e) {
+        console.error("Order Success Handler Failed:", e);
+        // Fallback: Force reload or at least try to switch view
+        alert("สั่งอาหารเรียบร้อยแล้ว");
+        location.reload();
+    }
 }
 
 // --- SSE & WAITING UI ---
