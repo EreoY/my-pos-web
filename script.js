@@ -99,6 +99,7 @@ function updateNavUI() {
 
 function updateNavBadge() {
     const badge = document.getElementById('nav-cart-badge');
+    if (!badge) return; // Guard clause for when badge is not in DOM
     const count = CART.reduce((sum, item) => sum + item.qty, 0);
     if (count > 0) {
         badge.innerText = count;
@@ -394,6 +395,7 @@ function renderMenuPage() {
     `;
 
     document.getElementById('app-view').innerHTML = html;
+    updateNavBadge(); // Ensure badge is updated after re-render
 }
 
 function setActiveCategory(sysId) {
