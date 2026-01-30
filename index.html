@@ -118,16 +118,10 @@
                 <span class="text-xs font-medium">เมนู</span>
             </button>
 
-            <!-- Cart Tab -->
-            <button onclick="switchView('cart')" id="nav-cart"
-                class="flex flex-col items-center gap-1 w-16 group text-gray-400 dark:text-gray-500 hover:text-gray-800 dark:hover:text-gray-200 transition-colors relative">
-                <div class="relative px-4 py-1 flex items-center justify-center rounded-full transition-colors"
-                    id="nav-icon-bg-cart">
-                    <span class="material-symbols-outlined text-[24px]">shopping_basket</span>
-                    <span id="nav-cart-badge"
-                        class="absolute -top-1 -right-1 flex h-4 w-4 items-center justify-center rounded-full bg-red-500 text-[10px] font-bold text-white border-2 border-white dark:border-[#121811] opacity-0">0</span>
-                </div>
-                <span class="text-xs font-medium">ตะกร้า</span>
+            <!-- Call Staff FAB (Replaces Cart) -->
+            <button onclick="openCallStaffModal()" id="nav-call"
+                class="relative -top-6 flex flex-col items-center justify-center w-16 h-16 rounded-full bg-primary shadow-lg border-4 border-surface-light dark:border-background-dark active:scale-95 transition-transform">
+                <span class="material-symbols-outlined text-[32px] text-[#121811]">notifications_active</span>
             </button>
 
             <!-- Bill Tab -->

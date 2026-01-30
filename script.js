@@ -64,7 +64,7 @@ window.switchView = (viewName) => {
 
 
 function updateNavUI() {
-    const tabs = ['menu', 'cart', 'bill'];
+    const tabs = ['menu', 'bill']; // Removed 'cart' from bottom nav handling
     tabs.forEach(t => {
         const btn = document.getElementById(`nav-${t}`);
         const iconBg = document.getElementById(`nav-icon-bg-${t}`);
@@ -354,8 +354,9 @@ function renderMenuPage() {
                     </div>
                 </div>
                 <div class="flex w-12 items-center justify-end">
-                    <button class="flex items-center justify-center rounded-full w-10 h-10 bg-white dark:bg-gray-800 shadow-sm text-[#121811] dark:text-white hover:bg-gray-50 dark:hover:bg-gray-700 transition-colors relative">
-                        <span class="material-symbols-outlined" style="font-size: 24px;">notifications</span>
+                    <button onclick="switchView('cart')" class="relative flex items-center justify-center rounded-full w-10 h-10 bg-white dark:bg-gray-800 shadow-sm text-[#121811] dark:text-white hover:bg-gray-50 dark:hover:bg-gray-700 transition-colors">
+                        <span class="material-symbols-outlined" style="font-size: 24px;">shopping_basket</span>
+                         <span id="nav-cart-badge" class="absolute -top-1 -right-1 flex h-4 w-4 items-center justify-center rounded-full bg-red-500 text-[10px] font-bold text-white border-2 border-white dark:border-[#121811] opacity-0">0</span>
                     </button>
                 </div>
             </div>
@@ -1029,3 +1030,99 @@ async function renderBillPage() {
         document.getElementById('app-view').innerHTML = `<div class="p-8 text-center text-red-500">Error loading bill</div>`;
     }
 }
+
+// 5. CALL STAFF MODAL (New Feature)
+window.openCallStaffModal = () => {
+    const modal = document.getElementById('item-modal-container');
+    modal.classList.remove('hidden');
+    // Allow reflow for transition
+    setTimeout(() => {
+        modal.classList.remove('translate-y-full');
+    }, 10);
+
+    modal.innerHTML = `
+        <div class="bg-black/50 fixed inset-0 z-40" onclick="closeItemDetail()"></div>
+        <div class="relative z-50 mt-auto w-full bg-surface-light dark:bg-background-dark rounded-t-3xl p-6 pb-12 shadow-[0_-10px_40px_rgba(0,0,0,0.1)]">
+            <div class="w-12 h-1.5 bg-gray-300 dark:bg-gray-700 rounded-full mx-auto mb-6"></div>
+            
+            <h2 class="text-xl font-bold text-center mb-8 text-[#121811] dark:text-white">ต้องการความช่วยเหลือ?</h2>
+
+            <div class="grid gap-4">
+                <button onclick="sendCallStaffRequest('CHECK_BILL')" class="flex items-center gap-4 p-4 rounded-xl bg-green-50 dark:bg-green-900/20 active:scale-98 transition-transform">
+                    <div class="w-12 h-12 rounded-full bg-green-100 dark:bg-green-800 flex items-center justify-center text-green-700 dark:text-green-300">
+                        <span class="material-symbols-outlined text-2xl">payments</span>
+                    </div>
+                    <div class="text-left">
+                        <h3 class="font-bold text-green-900 dark:text-green-100">เรียกเช็คบิล</h3>
+                        <p class="text-xs text-green-700 dark:text-green-300">ชำระเงิน / เก็บเงิน</p>
+                    </div>
+                </button>
+
+                <button onclick="sendCallStaffRequest('CALL_STAFF')" class="flex items-center gap-4 p-4 rounded-xl bg-orange-50 dark:bg-orange-900/20 active:scale-98 transition-transform">
+                     <div class="w-12 h-12 rounded-full bg-orange-100 dark:bg-orange-800 flex items-center justify-center text-orange-700 dark:text-orange-300">
+                        <span class="material-symbols-outlined text-2xl">person_raised_hand</span>
+                    </div>
+                    <div class="text-left">
+                        <h3 class="font-bold text-orange-900 dark:text-orange-100">เรียกพนักงาน</h3>
+                        <p class="text-xs text-orange-700 dark:text-orange-300">สอบถาม / สั่งเพิ่ม</p>
+                    </div>
+                </button>
+
+                <button onclick="sendCallStaffRequest('EDIT_ORDER')" class="flex items-center gap-4 p-4 rounded-xl bg-blue-50 dark:bg-blue-900/20 active:scale-98 transition-transform">
+                     <div class="w-12 h-12 rounded-full bg-blue-100 dark:bg-blue-800 flex items-center justify-center text-blue-700 dark:text-blue-300">
+                        <span class="material-symbols-outlined text-2xl">edit_note</span>
+                    </div>
+                    <div class="text-left">
+                        <h3 class="font-bold text-blue-900 dark:text-blue-100">แก้ไขออเดอร์</h3>
+                        <p class="text-xs text-blue-700 dark:text-blue-300">แจ้งเปลี่ยนแปลงรายการ</p>
+                    </div>
+                </button>
+            </div>
+             <button onclick="closeItemDetail()" class="mt-8 w-full py-3 text-gray-500 font-medium">ปิด</button>
+        </div>
+    `;
+};
+
+window.sendCallStaffRequest = async (subtype) => {
+    // Show Loading
+    const modal = document.getElementById('item-modal-container');
+    modal.innerHTML = `
+         <div class="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm">
+            <div class="bg-white dark:bg-card-dark p-6 rounded-2xl flex flex-col items-center">
+                <div class="animate-spin h-10 w-10 border-4 border-primary border-t-transparent rounded-full mb-4"></div>
+                <p class="font-bold text-gray-800 dark:text-white">กำลังเรียกพนักงาน...</p>
+            </div>
+         </div>
+    `;
+
+    try {
+        await fetch(CLOUD_FUNCTION_URL, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+                type: 'CALL_STAFF',
+                shopId: SHOP_ID,
+                tableId: TABLE_NO,
+                subtype: subtype
+            })
+        });
+
+        // Success Feedback
+        modal.innerHTML = `
+             <div class="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm">
+                <div class="bg-white dark:bg-card-dark p-6 rounded-2xl flex flex-col items-center">
+                    <div class="h-12 w-12 bg-green-100 rounded-full flex items-center justify-center mb-4">
+                        <span class="material-symbols-outlined text-green-600 text-3xl">check</span>
+                    </div>
+                    <p class="font-bold text-gray-800 dark:text-white">แจ้งเตือนแล้ว</p>
+                    <p class="text-xs text-gray-500 mt-1">พนักงานกำลังมาครับ</p>
+                </div>
+             </div>
+        `;
+        setTimeout(() => closeItemDetail(), 2000);
+
+    } catch (e) {
+        alert("การเชื่อมต่อขัดข้อง กรุณาลองใหม่");
+        closeItemDetail();
+    }
+};
