@@ -40,132 +40,7 @@ let CURRENT_ITEM = null;
 let CURRENT_QTY = 1;
 let SELECTED_OPTIONS = [];
 
-// ======== GOOGLE SHEETS INTEGRATION ========
-const GS_CLIENT_ID = '20557328088-3aehln3fi9mpv2ij7fil3f0nq7bamogh.apps.googleusercontent.com';
-const GS_SCOPES = 'https://www.googleapis.com/auth/spreadsheets https://www.googleapis.com/auth/drive.file https://www.googleapis.com/auth/userinfo.profile';
-let gsTokenClient = null;
-let gsAccessToken = null;
-let gsSheetId = localStorage.getItem('pos_sheet_id') || null;
-let gsUserInfo = null;
 let BILL_ORDERS = [];
-
-function initGoogleSheets() {
-    const script = document.createElement('script');
-    script.src = 'https://accounts.google.com/gsi/client';
-    script.onload = () => {
-        try {
-            gsTokenClient = google.accounts.oauth2.initTokenClient({
-                client_id: GS_CLIENT_ID,
-                scope: GS_SCOPES,
-                callback: (response) => {
-                    if (response.error) {
-                        console.error('Google login error:', response.error);
-                        return;
-                    }
-                    gsAccessToken = response.access_token;
-                    gsGetUserInfo();
-                }
-            });
-            updateGoogleLoginButton();
-        } catch (e) {
-            console.error('Google Sheets init failed:', e);
-        }
-    };
-    document.head.appendChild(script);
-}
-
-async function gsGetUserInfo() {
-    try {
-        const res = await fetch('https://www.googleapis.com/oauth2/v2/userinfo', {
-            headers: { Authorization: `Bearer ${gsAccessToken}` }
-        });
-        gsUserInfo = await res.json();
-        if (gsUserInfo.error) { gsUserInfo = null; return; }
-        console.log('Google logged in:', gsUserInfo.name);
-        gsEnsureSheet();
-        updateGoogleLoginButton();
-    } catch (e) {
-        console.error('Google user info failed:', e);
-    }
-}
-
-async function gsEnsureSheet() {
-    if (gsSheetId || !gsAccessToken) return;
-    try {
-        const res = await fetch('https://sheets.googleapis.com/v4/spreadsheets', {
-            method: 'POST',
-            headers: {
-                Authorization: `Bearer ${gsAccessToken}`,
-                'Content-Type': 'application/json'
-            },
-            body: JSON.stringify({
-                properties: { title: 'POS Order History' },
-                sheets: [{ properties: { title: 'Orders' } }]
-            })
-        });
-        const data = await res.json();
-        if (data.spreadsheetId) {
-            gsSheetId = data.spreadsheetId;
-            localStorage.setItem('pos_sheet_id', gsSheetId);
-            await fetch(`https://sheets.googleapis.com/v4/spreadsheets/${gsSheetId}/values/Orders!A1:G1?valueInputOption=USER_ENTERED`, {
-                method: 'PUT',
-                headers: {
-                    Authorization: `Bearer ${gsAccessToken}`,
-                    'Content-Type': 'application/json'
-                },
-                body: JSON.stringify({ values: [['Order ID', 'Date', 'Shop', 'Table', 'Items', 'Total', 'Status']] })
-            });
-            console.log('Google Sheet created:', gsSheetId);
-        }
-    } catch (e) {
-        console.error('Failed to create sheet:', e);
-    }
-}
-
-async function gsWriteOrders(orders) {
-    if (!gsAccessToken || !gsSheetId || !orders.length) return;
-    try {
-        const rows = orders.map(order => {
-            let od = {};
-            try { od = JSON.parse(order.order_data); } catch (e) {}
-            const itemsStr = (od.items || []).map(i => `${i.qty}x ${i.name}`).join(', ');
-            return [
-                order.order_id,
-                new Date(order.created_at).toLocaleString('th-TH'),
-                od.shopId || SHOP_ID,
-                od.table || TABLE_NO,
-                itemsStr,
-                od.total || 0,
-                order.status
-            ];
-        });
-        await fetch(`https://sheets.googleapis.com/v4/spreadsheets/${gsSheetId}/values/Orders!A:G:append?valueInputOption=USER_ENTERED&insertDataOption=INSERT_ROWS`, {
-            method: 'POST',
-            headers: {
-                Authorization: `Bearer ${gsAccessToken}`,
-                'Content-Type': 'application/json'
-            },
-            body: JSON.stringify({ values: rows })
-        });
-        console.log('Orders written to Google Sheet');
-    } catch (e) {
-        console.error('Failed to write to Sheet:', e);
-    }
-}
-
-function updateGoogleLoginButton() {
-    const btn = document.getElementById('google-login-btn');
-    if (!btn) return;
-    if (gsUserInfo) {
-        btn.innerHTML = `<img src="${gsUserInfo.picture}" class="w-6 h-6 rounded-full">`;
-        btn.title = `บันทึกประวัติ: ${gsUserInfo.name}`;
-        btn.onclick = null;
-    } else {
-        btn.innerHTML = `<span class="material-symbols-outlined" style="font-size:20px">person</span>`;
-        btn.title = 'ล็อกอินเพื่อบันทึกประวัติออเดอร์';
-        btn.onclick = () => gsTokenClient && gsTokenClient.requestAccessToken();
-    }
-}
 
 // --- SESSION LOGIC ---
 // --- SESSION LOGIC ---
@@ -439,9 +314,6 @@ function renderMenuPage() {
                     </div>
                 </div>
                 <div class="flex items-center gap-2">
-                    <button id="google-login-btn" class="relative flex items-center justify-center rounded-full w-10 h-10 bg-white dark:bg-gray-800 shadow-sm text-gray-400 hover:text-primary transition-colors">
-                        <span class="material-symbols-outlined" style="font-size:20px">person</span>
-                    </button>
                     <button onclick="switchView('cart')" class="relative flex items-center justify-center rounded-full w-10 h-10 bg-white dark:bg-gray-800 shadow-sm text-[#121811] dark:text-white hover:bg-gray-50 dark:hover:bg-gray-700 transition-colors">
                         <span class="material-symbols-outlined" style="font-size: 24px;">shopping_basket</span>
                         ${(() => {
@@ -1242,14 +1114,7 @@ window.closeServiceModal = () => {
 };
 
 window.requestService = async (type) => {
-    // Optimistic Feedback (Fire and Forget)
     closeServiceModal();
-
-    // Write to Google Sheet on check bill (fire and forget)
-    if (type === 'CHECK_BILL' && gsAccessToken && BILL_ORDERS.length > 0) {
-        gsWriteOrders(BILL_ORDERS);
-    }
-
     alert("ส่งคำขอเรียบร้อยแล้ว พนักงานจะรีบมาให้บริการครับ");
 
     try {
@@ -1292,5 +1157,4 @@ window.requestService = async (type) => {
     }
 
     checkSession();
-    initGoogleSheets();
 })();
